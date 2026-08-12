@@ -30,6 +30,7 @@ class TaskUpdate(BaseModel):
 class TaskOut(TaskCreate):
     id: int
     status: TaskStatus
+    at_risk: bool
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
@@ -39,6 +40,14 @@ class EventCreate(BaseModel):
     category: str
     summary: str
     owner_id: int | None = None
+
+
+class ConnectionOut(BaseModel):
+    channel: str
+    status: str
+    setup_url: str | None = None
+    detail: str | None = None
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ChatMessage(BaseModel):

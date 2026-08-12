@@ -7,9 +7,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .database import Base, engine, get_db
-from .models import AuditLog, Dependency, Event, Notification, Task, TaskStatus, TaskStatusHistory, TeamMember, User
-from .schemas import ChatMessage, DependencyCreate, EventCreate, MemberCreate, MemberOut, TaskCreate, TaskOut, TaskUpdate
-from .teamops import process_message
+from .models import AuditLog, Connection, Dependency, Event, Notification, Task, TaskStatus, TaskStatusHistory, TeamMember, User
+from .schemas import ChatMessage, ConnectionOut, DependencyCreate, EventCreate, MemberCreate, MemberOut, TaskCreate, TaskOut, TaskUpdate
+from .teamops import process_message, handle_event
 
 
 @asynccontextmanager
@@ -90,6 +90,8 @@ def update_task(task_id: int, payload: TaskUpdate, db: Session = Depends(get_db)
 @app.post("/events", status_code=201)
 def create_event(payload: EventCreate, db: Session = Depends(get_db)):
     event = Event(**payload.model_dump()); db.add(event); db.commit(); db.refresh(event)
+    handle_event(db, payload.model_dump())
+    db.commit()
     return event
 
 
@@ -98,12 +100,62 @@ def list_events(db: Session = Depends(get_db)):
     return list(db.scalars(select(Event).order_by(Event.id.desc()).limit(50)))
 
 
+@app.get("/connections", response_model=list[ConnectionOut])
+def list_connections(db: Session = Depends(get_db)):
+    known = {item.channel: item for item in db.scalars(select(Connection)).all()}
+    return [known.get(channel) or Connection(channel=channel, status="not_connected", detail="Ready to connect") for channel in ("email", "slack")]
+
+
+@app.post("/connections/{channel}/start", response_model=ConnectionOut)
+def start_connection(channel: str, db: Session = Depends(get_db)):
+    if channel not in {"email", "slack"}:
+        raise HTTPException(404, "Unsupported channel")
+    item = db.scalar(select(Connection).where(Connection.channel == channel)) or Connection(channel=channel)
+    if not item.id:
+        db.add(item)
+    if not getenv("CASPIAN_API_KEY"):
+        item.status = "needs_configuration"
+        item.detail = "Add CASPIAN_API_KEY and the channel credentials on the server, then retry."
+        db.commit(); db.refresh(item)
+        return item
+    try:
+        from caspian_sdk import CommClient
+        client = CommClient()
+        if channel == "email":
+            connection = client.connect_email()
+        elif getenv("CASPIAN_SLACK_MODE", "oauth").casefold() == "socket":
+            connection = client.connect_slack(bot_token=getenv("SLACK_BOT_TOKEN"), app_token=getenv("SLACK_APP_TOKEN"))
+        else:
+            connection = client.connect_slack(slack_client_id=getenv("SLACK_CLIENT_ID"), slack_client_secret=getenv("SLACK_CLIENT_SECRET"), slack_signing_secret=getenv("SLACK_SIGNING_SECRET"))
+        item.status = str(connection.get("status", "provisioning"))
+        item.external_id = connection.get("id")
+        item.setup_url = connection.get("authorize_url")
+        item.detail = "Continue in the browser to approve the workspace." if item.setup_url else "Connection request sent."
+        client.close()
+    except Exception as exc:
+        item.status = "needs_configuration"
+        item.detail = f"Connection could not start: {str(exc)[:180]}"
+    db.commit(); db.refresh(item)
+    return item
+
+
 @app.post("/dependencies", status_code=201)
 def create_dependency(payload: DependencyCreate, db: Session = Depends(get_db)):
     if payload.task_id == payload.depends_on_task_id:
         raise HTTPException(400, "A task cannot depend on itself")
     if not db.get(Task, payload.task_id) or not db.get(Task, payload.depends_on_task_id):
         raise HTTPException(404, "Task not found")
+    if db.scalar(select(Dependency).where(Dependency.task_id == payload.task_id, Dependency.depends_on_task_id == payload.depends_on_task_id)):
+        raise HTTPException(409, "Dependency already exists")
+    # A dependency from A -> B means A waits for B. Reject cycles before persisting.
+    seen = {payload.task_id}
+    frontier = [payload.depends_on_task_id]
+    while frontier:
+        current = frontier.pop()
+        if current in seen:
+            raise HTTPException(400, "Dependency would create a cycle")
+        seen.add(current)
+        frontier.extend(db.scalars(select(Dependency.depends_on_task_id).where(Dependency.task_id == current)).all())
     item = Dependency(**payload.model_dump()); db.add(item); db.commit(); db.refresh(item)
     return item
 
@@ -116,7 +168,14 @@ def list_dependencies(db: Session = Depends(get_db)):
 @app.get("/team/status")
 def team_status(db: Session = Depends(get_db)):
     tasks = list(db.scalars(select(Task)))
-    return {"total": len(tasks), "pending_ack": sum(t.status == "PENDING_ACK" for t in tasks), "blocked": sum(t.status == "BLOCKED" for t in tasks), "done": sum(t.status == "DONE" for t in tasks)}
+    return {
+        "total": len(tasks),
+        "pending_ack": sum(t.status == "PENDING_ACK" for t in tasks),
+        "blocked": sum(t.status == "BLOCKED" for t in tasks),
+        "delayed": sum(t.status == "DELAYED" for t in tasks),
+        "at_risk": sum(t.at_risk for t in tasks),
+        "done": sum(t.status == "DONE" for t in tasks),
+    }
 
 
 @app.post("/chat")

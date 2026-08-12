@@ -2,7 +2,7 @@
 
 Caspian TeamOps Sentinel turns team communication into persistent execution memory. A lead can assign work in natural Hinglish, the backend converts it into a validated task, and the responsible member can acknowledge or update it from the app or a Caspian-connected communication channel.
 
-> **Current status:** Hackathon MVP through Phase 4 — foundation, TeamOps message processing, React Native UX, Caspian email transport, and in-app notifications.
+> **Current status:** Hackathon MVP with an admin command center, role-based incident routing, voice-style assignment capture, and Caspian email/Slack connection flows.
 
 ## What the project demonstrates
 
@@ -28,6 +28,7 @@ This is not intended to be another chat interface. The app is the permanent home
   - `PENDING_ACK`
   - `TODO`
   - `IN_PROGRESS`
+  - `DELAYED`
   - `BLOCKED`
   - `DONE`
   - `CANCELLED`
@@ -58,6 +59,12 @@ This is not intended to be another chat interface. The app is the permanent home
 - Agent Inbox and commitment board built with Expo/React Native
 - Caspian email messages routed through the same TeamOps engine
 - In-app notifications with unread/read state
+- Phase 5 risk propagation for delayed prerequisites and downstream tasks
+- ContextFence blocking for likely credentials and secret-bearing messages
+- GitHub CI/build failure events that mark active owner work at risk
+- Admin command center for channel status, risks and team routing
+- Role directory that routes UI, backend, infrastructure and security incidents to the appropriate active responder
+- Voice-style assignment capture in the web app (Chrome Web Speech API) with a default "tonight" deadline
 - SQLite zero-configuration mode and PostgreSQL/Supabase compatibility
 - Audit records and task-status history
 
@@ -139,6 +146,11 @@ DATABASE_URL=sqlite:///./teamops.db
 CORS_ORIGINS=*
 CASPIAN_BASE_URL=https://api.trycaspianai.com
 CASPIAN_SENDER_MAP={}
+# Slack: oauth (recommended) or socket
+CASPIAN_SLACK_MODE=oauth
+# Optional AI routing. Leave unset to use deterministic routing only.
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-3.5-flash-lite
 ```
 
 `CASPIAN_API_KEY` is only required for a real Caspian listener. Never commit or share it.
@@ -229,6 +241,74 @@ CASPIAN_SENDER_MAP={"rahul@example.com":"Rahul","ali@example.com":"Ali"}
 
 Do not place real addresses in `.env.example` or documentation.
 
+## Caspian Slack integration
+
+The official Caspian SDK supports Slack through OAuth or Slack Socket Mode.
+OAuth is recommended because the workspace owner approves the installation
+from a browser and no Slack bot token is stored in this project.
+
+For OAuth, add these values to `.env`:
+
+```env
+CASPIAN_SLACK_MODE=oauth
+SLACK_CLIENT_ID=...
+SLACK_CLIENT_SECRET=...
+SLACK_SIGNING_SECRET=...
+```
+
+Then run:
+
+```bash
+cd backend
+python connect_caspian.py
+```
+
+Open the returned `authorize_url`, approve the workspace, and start the same
+listener:
+
+```bash
+python run_caspian.py
+```
+
+For Socket Mode instead, set `CASPIAN_SLACK_MODE=socket`, `SLACK_BOT_TOKEN`
+(`xoxb-...`) and `SLACK_APP_TOKEN` (`xapp-...`). The Slack app needs the
+permissions required by Caspian's Socket Mode connection. Slack messages then
+enter the same TeamOps engine as email and app messages.
+
+The admin app's **Connect** buttons call `POST /connections/{email|slack}/start`.
+They begin an official Caspian connection only when the required credentials
+are configured on the server; otherwise they honestly show the missing setup
+instead of marking a channel connected.
+
+## Product flow
+
+1. An admin adds people and their operational role: UI Developer, Backend Developer, AWS / DevOps, Security, or Team Lead.
+2. The admin connects Caspian email and/or Slack from the command center.
+3. A message or normalized event is evaluated by deterministic high-signal rules:
+   - a credential exposure creates a redacted security review;
+   - a blank/broken UI routes to a UI role;
+   - AWS, deployment, server, database and timeout failures route to DevOps;
+   - backend/API failures route to backend.
+4. Sentinel writes a task with an owner, acknowledgement status, deadline and notification. The original secret is never persisted.
+5. An admin can speak or type an assignment. The current web voice capture uses the browser's built-in Web Speech API and normalizes it into a task due tonight.
+
+## Optional Gemini AI routing
+
+When `GEMINI_API_KEY` is configured, messages that do not match an explicit
+TeamOps command are sent to Gemini for a structured **recommendation**. The
+default is `gemini-3.5-flash-lite`, a high-throughput model that supports a
+1M-token context window and structured output. The recommendation includes a
+category, priority, title, description, deadline hours, confidence and an owner
+chosen only from the active team directory.
+
+The backend still makes the final decision. It rejects an unknown/inactive
+owner, low-confidence suggestions, malformed JSON and provider errors. It also
+runs ContextFence first, so detected credentials are redacted and never sent to
+Gemini. The prompt includes only the current message, active member roles and a
+small window of compact, redacted TeamOps summaries—not the entire raw mailbox
+or Slack history on each call. Use a provider-managed retrieval/indexing layer
+later if you need secure long-horizon search across full channels.
+
 ## Main API endpoints
 
 | Method | Endpoint | Purpose |
@@ -275,7 +355,7 @@ npx expo export --platform web
 - Raw credentials must never be stored in TeamOps memory.
 - The current MVP performs no autonomous production changes.
 - Credential rotation and destructive actions remain human-approved future work.
-- ContextFence secret detection is planned for Phase 5.
+- ContextFence blocks likely secrets before they are persisted or displayed and alerts team leads without storing the raw value.
 
 ## Current limitations
 
@@ -283,11 +363,12 @@ npx expo export --platform web
 - Demo authentication is not production authentication.
 - Help marks the current task blocked; extension requests do not change deadlines without approval.
 - Sender mapping is configured manually for channel identities.
-- Dependency risk propagation, ContextFence and GitHub webhook intelligence are planned for Phase 5.
+- Slack workspace installation and credentials are required before Slack is live.
+- Dependency creation rejects duplicate edges and cycles. Delay reports propagate `at_risk` to all downstream tasks.
+- `/events` processes GitHub Actions/CI/build failures and persists owner/lead notifications.
 
 ## Roadmap
 
-- **Phase 5:** dependency propagation, ContextFence and GitHub CI events
 - **Phase 6:** end-to-end demo hardening, deployment and rehearsal
 - Later: richer identity management, production authentication, migrations and additional channels
 

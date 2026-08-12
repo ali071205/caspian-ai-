@@ -1,0 +1,1416 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Caspian TeamOps - Ditto Task & Calendar UI</title>
+    <!-- Google Fonts: Plus Jakarta Sans -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- React & ReactDOM CDN -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <!-- Babel for JSX compilation -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+      :root {
+        --font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+        
+        /* Color Strategy from Reference Image */
+        --bg-presentation: #e4dcfa;
+        --bg-presentation-end: #d5c8f8;
+        
+        --color-purple-primary: #7c69ef;
+        --color-purple-dark: #6252db;
+        --color-purple-light: #f0ecfd;
+        
+        --color-pink-primary: #f856cf;
+        --color-pink-light: #fde6f8;
+        
+        --color-yellow-primary: #ffbe43;
+        --color-yellow-light: #fff6e0;
+        
+        --color-blue-primary: #55c3ff;
+        --color-blue-light: #e6f7ff;
+        
+        --color-dark-pill: #1c1d22;
+        --color-text-main: #121316;
+        --color-text-muted: #848792;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        font-family: var(--font-family);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      body {
+        background-color: #dcd3f9;
+        color: var(--color-text-main);
+        min-height: 100vh;
+      }
+
+      /* Web App Control Header */
+      .web-header {
+        background: rgba(255, 255, 255, 0.92);
+        backdrop-filter: blur(12px);
+        border-bottom: 1px solid rgba(124, 105, 239, 0.15);
+        padding: 14px 28px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+      }
+
+      .brand-title {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 800;
+        font-size: 18px;
+        letter-spacing: -0.5px;
+        color: var(--color-text-main);
+      }
+
+      .brand-badge {
+        background: var(--color-purple-primary);
+        color: #fff;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 4px 10px;
+        border-radius: 20px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .mode-switcher {
+        display: flex;
+        background: rgba(0, 0, 0, 0.05);
+        padding: 4px;
+        border-radius: 12px;
+        gap: 4px;
+      }
+
+      .mode-btn {
+        border: none;
+        background: transparent;
+        padding: 8px 16px;
+        font-size: 13px;
+        font-weight: 600;
+        color: #555;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .mode-btn:hover {
+        color: var(--color-purple-primary);
+      }
+
+      .mode-btn.active {
+        background: #ffffff;
+        color: var(--color-purple-primary);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        font-weight: 700;
+      }
+
+      /* Main Presentation Canvas */
+      .presentation-container {
+        min-height: calc(100vh - 65px);
+        background: linear-gradient(135deg, var(--bg-presentation) 0%, var(--bg-presentation-end) 100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 40px 20px;
+      }
+
+      /* 3 Screen Grid (Ditto Reference Image Layout) */
+      .three-screen-grid {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        align-items: center;
+        gap: 36px;
+        max-width: 1350px;
+        width: 100%;
+        padding: 20px 0;
+      }
+
+      /* Phone Outer Frame */
+      .phone-frame {
+        width: 350px;
+        height: 720px;
+        background: #ffffff;
+        border-radius: 46px;
+        box-shadow: 
+          0 24px 48px -12px rgba(98, 82, 219, 0.25),
+          0 8px 16px -4px rgba(0, 0, 0, 0.06);
+        overflow: hidden;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+      }
+
+      .phone-frame:hover {
+        transform: translateY(-6px);
+        box-shadow: 
+          0 32px 64px -12px rgba(98, 82, 219, 0.32),
+          0 12px 24px -4px rgba(0, 0, 0, 0.08);
+      }
+
+      .screen-label {
+        text-align: center;
+        margin-top: 14px;
+        font-size: 13px;
+        font-weight: 700;
+        color: #61587d;
+      }
+
+      /* Status Bar */
+      .status-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 14px 24px 4px 24px;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--color-text-main);
+        background: transparent;
+        z-index: 10;
+      }
+
+      .status-bar-icons {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .screen-content {
+        flex: 1;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        background: #ffffff;
+        padding-bottom: 20px;
+        scrollbar-width: none;
+      }
+
+      .screen-content::-webkit-scrollbar {
+        display: none;
+      }
+
+      /* SCREEN 1: HOME */
+      .home-container {
+        padding: 16px 22px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+
+      .home-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .profile-info {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .avatar-main {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        object-fit: cover;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+      }
+
+      .greeting-text {
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--color-text-muted);
+      }
+
+      .user-name {
+        font-size: 15px;
+        font-weight: 800;
+        color: var(--color-text-main);
+      }
+
+      .bell-btn {
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        border: 1px solid #ebebeb;
+        background: #ffffff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        cursor: pointer;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+      }
+
+      .notification-dot {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 7px;
+        height: 7px;
+        background: #ff3b30;
+        border-radius: 50%;
+      }
+
+      .home-hero-title {
+        font-size: 26px;
+        line-height: 1.25;
+        color: var(--color-text-main);
+      }
+
+      .home-hero-title .light {
+        font-weight: 400;
+        color: #2c2d30;
+      }
+
+      .home-hero-title .bold {
+        font-weight: 800;
+        display: block;
+      }
+
+      /* Members Section */
+      .members-section {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .members-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .members-title {
+        font-size: 16px;
+        font-weight: 800;
+        color: var(--color-text-main);
+      }
+
+      .add-member-btn {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: var(--color-purple-primary);
+        color: #ffffff;
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-weight: 700;
+        font-size: 18px;
+        transition: transform 0.2s ease;
+      }
+
+      .add-member-btn:hover {
+        transform: scale(1.08);
+      }
+
+      .members-avatars-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        overflow-x: auto;
+        padding-bottom: 4px;
+        scrollbar-width: none;
+      }
+
+      .member-avatar-circle {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 2px solid #ffffff;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+        flex-shrink: 0;
+      }
+
+      /* Hero Next Task Card */
+      .next-task-section {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .next-task-heading {
+        font-size: 16px;
+        font-weight: 800;
+        color: var(--color-text-main);
+      }
+
+      .stacked-card-wrapper {
+        position: relative;
+        margin-bottom: 12px;
+      }
+
+      .card-depth-layer {
+        position: absolute;
+        bottom: -8px;
+        left: 10px;
+        right: 10px;
+        height: 40px;
+        background: #9484f7;
+        border-radius: 24px;
+        z-index: 1;
+        opacity: 0.65;
+      }
+
+      .hero-task-card {
+        position: relative;
+        z-index: 2;
+        background: var(--color-purple-primary);
+        border-radius: 28px;
+        padding: 22px;
+        color: #ffffff;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        height: 245px;
+        box-shadow: 0 14px 30px rgba(124, 105, 239, 0.35);
+        overflow: hidden;
+      }
+
+      .hero-card-title {
+        font-size: 20px;
+        font-weight: 800;
+        line-height: 1.3;
+        max-width: 170px;
+      }
+
+      .hero-card-subtitle {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.8);
+        margin-top: 4px;
+        font-weight: 500;
+      }
+
+      /* 3D Graphics inside card */
+      .hero-card-illustration {
+        position: absolute;
+        right: 16px;
+        top: 20px;
+        width: 120px;
+        height: 140px;
+        pointer-events: none;
+      }
+
+      .isometric-box {
+        width: 68px;
+        height: 68px;
+        background: linear-gradient(135deg, #ffc069 0%, #fa8c16 100%);
+        border-radius: 16px;
+        transform: rotate(-12deg) rotateX(20deg);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.15);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: absolute;
+        right: 10px;
+        top: 15px;
+      }
+
+      .floating-bubble {
+        position: absolute;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        font-weight: 800;
+      }
+
+      .bubble-q {
+        width: 32px;
+        height: 32px;
+        left: -8px;
+        top: 12px;
+        background: #00cebe;
+        color: #fff;
+        font-size: 15px;
+      }
+
+      .bubble-glass {
+        width: 28px;
+        height: 28px;
+        right: -6px;
+        top: -6px;
+        background: #ffffff;
+        color: #ff9500;
+        font-size: 13px;
+      }
+
+      .bubble-h {
+        width: 26px;
+        height: 26px;
+        left: 12px;
+        bottom: 4px;
+        background: #ff2d55;
+        color: #ffffff;
+        font-size: 12px;
+      }
+
+      .hero-card-bottom {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        margin-top: auto;
+        z-index: 3;
+      }
+
+      .hero-assigned-stack {
+        display: flex;
+        margin-left: 6px;
+      }
+
+      .stack-avatar {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        border: 2px solid var(--color-purple-primary);
+        margin-left: -8px;
+        object-fit: cover;
+      }
+
+      .card-action-btn {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: #ffffff;
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--color-text-main);
+        cursor: pointer;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        font-size: 18px;
+        font-weight: 800;
+        transition: transform 0.2s ease;
+      }
+
+      .card-action-btn:hover {
+        transform: scale(1.08);
+      }
+
+      /* Floating Bottom Navigation Bar */
+      .bottom-nav-container {
+        position: absolute;
+        bottom: 14px;
+        left: 0;
+        right: 0;
+        display: flex;
+        justify-content: center;
+        z-index: 20;
+        padding: 0 20px;
+      }
+
+      .bottom-nav-bar {
+        background: var(--color-dark-pill);
+        height: 60px;
+        border-radius: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: space-around;
+        padding: 0 10px;
+        width: 100%;
+        max-width: 290px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+      }
+
+      .nav-item {
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #7b7e8c;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .nav-item.active {
+        background: var(--color-purple-primary);
+        color: #ffffff;
+        box-shadow: 0 4px 12px rgba(124, 105, 239, 0.4);
+      }
+
+      /* SCREEN 2: CALENDAR STYLES */
+      .calendar-container {
+        padding: 16px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .calendar-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .icon-btn-round {
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        border: 1px solid #ededed;
+        background: #ffffff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--color-text-main);
+        cursor: pointer;
+        font-weight: 700;
+      }
+
+      .calendar-title {
+        font-size: 17px;
+        font-weight: 800;
+        color: var(--color-text-main);
+      }
+
+      .month-label {
+        text-align: center;
+        font-size: 13px;
+        font-weight: 700;
+        color: #555866;
+      }
+
+      .date-strip {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .date-capsule {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 10px 8px;
+        border-radius: 20px;
+        width: 40px;
+        gap: 2px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .date-capsule .day-num {
+        font-size: 14px;
+        font-weight: 800;
+        color: var(--color-text-main);
+      }
+
+      .date-capsule .day-name {
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--color-text-muted);
+      }
+
+      .date-capsule.active {
+        background: var(--color-purple-primary);
+        box-shadow: 0 6px 16px rgba(124, 105, 239, 0.35);
+      }
+
+      .date-capsule.active .day-num,
+      .date-capsule.active .day-name {
+        color: #ffffff;
+      }
+
+      .timeline-list {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        margin-top: 8px;
+      }
+
+      .timeline-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+      }
+
+      .time-label {
+        width: 62px;
+        font-size: 11px;
+        font-weight: 700;
+        color: #a0a3b1;
+        padding-top: 12px;
+      }
+
+      .time-badge-pill {
+        background: var(--color-dark-pill);
+        color: #ffffff;
+        font-size: 11px;
+        font-weight: 800;
+        padding: 6px 10px;
+        border-radius: 14px;
+        display: inline-block;
+      }
+
+      .event-card {
+        flex: 1;
+        border-radius: 22px;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        position: relative;
+        box-shadow: 0 6px 16px rgba(0,0,0,0.04);
+        cursor: pointer;
+        min-height: 105px;
+        transition: transform 0.2s ease;
+      }
+
+      .event-card:hover {
+        transform: scale(1.02);
+      }
+
+      .event-card.pink {
+        background: var(--color-pink-primary);
+        color: #ffffff;
+      }
+
+      .event-card.yellow {
+        background: var(--color-yellow-primary);
+        color: var(--color-text-main);
+      }
+
+      .event-card.blue {
+        background: var(--color-blue-primary);
+        color: #ffffff;
+      }
+
+      .event-card-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+      }
+
+      .event-card-title {
+        font-size: 15px;
+        font-weight: 800;
+      }
+
+      .event-card-time {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 11px;
+        opacity: 0.9;
+        margin-top: 4px;
+        font-weight: 600;
+      }
+
+      .event-assigned-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 14px;
+      }
+
+      .assigned-label {
+        font-size: 10px;
+        font-weight: 600;
+        opacity: 0.85;
+      }
+
+      .assigned-user-info {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 2px;
+      }
+
+      .user-mini-avatar {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        object-fit: cover;
+      }
+
+      .user-mini-name {
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      .avatar-stack-mini {
+        display: flex;
+        align-items: center;
+      }
+
+      .stack-img {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        border: 1.5px solid #ffffff;
+        margin-left: -6px;
+        object-fit: cover;
+      }
+
+      .stack-img:first-child {
+        margin-left: 0;
+      }
+
+      .stack-more-badge {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: var(--color-dark-pill);
+        color: #ffffff;
+        font-size: 9px;
+        font-weight: 800;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-left: -6px;
+        border: 1.5px solid #ffffff;
+      }
+
+      /* SCREEN 3: DETAIL / PLAN STYLES */
+      .detail-container {
+        padding: 16px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+
+      .detail-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .time-range-badge-center {
+        display: flex;
+        justify-content: center;
+      }
+
+      .time-range-pill {
+        background: var(--color-dark-pill);
+        color: #ffffff;
+        font-size: 13px;
+        font-weight: 800;
+        padding: 8px 20px;
+        border-radius: 20px;
+      }
+
+      .meeting-title-block {
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .meeting-main-title {
+        font-size: 24px;
+        font-weight: 800;
+        color: var(--color-text-main);
+      }
+
+      .meeting-subtitle {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--color-text-muted);
+      }
+
+      .attendees-stack-center {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .attendees-avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        border: 2px solid #ffffff;
+        margin-left: -10px;
+        object-fit: cover;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+      }
+
+      .attendees-avatar:first-child {
+        margin-left: 0;
+      }
+
+      .attendees-more-badge {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: var(--color-dark-pill);
+        color: #ffffff;
+        font-size: 12px;
+        font-weight: 800;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-left: -10px;
+        border: 2px solid #ffffff;
+      }
+
+      .plan-section {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .plan-section-title {
+        font-size: 18px;
+        font-weight: 800;
+        color: var(--color-text-main);
+      }
+
+      .plan-cards-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .plan-card {
+        border-radius: 22px;
+        padding: 18px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        box-shadow: 0 6px 18px rgba(0,0,0,0.04);
+        cursor: pointer;
+        transition: transform 0.2s ease, opacity 0.2s ease;
+      }
+
+      .plan-card:hover {
+        transform: translateY(-2px);
+      }
+
+      .plan-card.completed {
+        opacity: 0.65;
+      }
+
+      .plan-card.purple {
+        background: var(--color-purple-primary);
+        color: #ffffff;
+      }
+
+      .plan-card.yellow {
+        background: var(--color-yellow-primary);
+        color: var(--color-text-main);
+      }
+
+      .plan-card.pink {
+        background: var(--color-pink-primary);
+        color: #ffffff;
+      }
+
+      .plan-card-text {
+        font-size: 14px;
+        font-weight: 700;
+        max-width: 190px;
+        line-height: 1.35;
+      }
+
+      .plan-card-text.strike {
+        text-decoration: line-through;
+      }
+
+      .plan-card-time {
+        font-size: 11px;
+        font-weight: 700;
+        opacity: 0.9;
+        white-space: nowrap;
+      }
+
+      @media (max-width: 1150px) {
+        .three-screen-grid {
+          gap: 20px;
+        }
+        .phone-frame {
+          width: 320px;
+          height: 680px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+      const membersData = [
+        { id: 'm1', name: 'Antony Jacob', role: 'Product Lead', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80' },
+        { id: 'm2', name: 'Wade Warren', role: 'UX Researcher', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80' },
+        { id: 'm3', name: 'Leslie Alexander', role: 'UI Designer', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80' },
+        { id: 'm4', name: 'Kristin Watson', role: 'Product Designer', avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80' },
+        { id: 'm5', name: 'Eleanor Pena', role: 'Frontend Dev', avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150&auto=format&fit=crop&q=80' },
+        { id: 'm6', name: 'Guy Hawkins', role: 'Design Lead', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80' },
+        { id: 'm7', name: 'Cody Fisher', role: 'Backend Eng', avatar: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=150&auto=format&fit=crop&q=80' },
+        { id: 'm8', name: 'Jane Cooper', role: 'QA Lead', avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80' },
+      ];
+
+      const initialPlans = [
+        { id: 'p1', title: 'Discussion on Client Requirements', timeRange: '11:30 - 12:00', color: 'purple', completed: false },
+        { id: 'p2', title: 'Organizing Team Roles for Project Success', timeRange: '12:00 - 12:30', color: 'yellow', completed: false },
+        { id: 'p3', title: 'Meeting Outcomes and Summary', timeRange: '12:30 - 01:00', color: 'pink', completed: false },
+      ];
+
+      // Screen 1: Home View
+      function HomeScreen({ onGoCalendar, onGoDetail }) {
+        return (
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
+            <div className="status-bar">
+              <span>9:41</span>
+              <div className="status-bar-icons">
+                <span>📶</span>
+                <span>🔋</span>
+              </div>
+            </div>
+
+            <div className="screen-content">
+              <div className="home-container">
+                <div className="home-header">
+                  <div className="profile-info">
+                    <img src={membersData[0].avatar} alt="Antony" className="avatar-main" />
+                    <div>
+                      <div className="greeting-text">Good Morning !</div>
+                      <div className="user-name">Antony Jacob</div>
+                    </div>
+                  </div>
+                  <button className="bell-btn">
+                    <span>🔔</span>
+                    <div className="notification-dot"></div>
+                  </button>
+                </div>
+
+                <div className="home-hero-title">
+                  <span className="light">You have 3</span>
+                  <span className="bold">task for today</span>
+                </div>
+
+                <div className="members-section">
+                  <div className="members-header">
+                    <span className="members-title">8 Members</span>
+                    <button className="add-member-btn">+</button>
+                  </div>
+                  <div className="members-avatars-row">
+                    {membersData.map((m) => (
+                      <img key={m.id} src={m.avatar} alt={m.name} title={m.name} className="member-avatar-circle" />
+                    ))}
+                  </div>
+                </div>
+
+                <div className="next-task-section">
+                  <div className="next-task-heading">Next Task</div>
+                  <div className="stacked-card-wrapper">
+                    <div className="hero-task-card" onClick={onGoDetail} style={{ cursor: 'pointer' }}>
+                      <div>
+                        <div className="hero-card-title">Healthcare Dashboard UI</div>
+                        <div className="hero-card-subtitle">Design Team</div>
+                      </div>
+
+                      <div className="hero-card-illustration">
+                        <div className="isometric-box">
+                          <span style={{ fontSize: '24px' }}>✨</span>
+                        </div>
+                        <div className="floating-bubble bubble-q">?</div>
+                        <div className="floating-bubble bubble-glass">⌛</div>
+                        <div className="floating-bubble bubble-h">♥</div>
+                      </div>
+
+                      <div className="hero-card-bottom">
+                        <div className="hero-assigned-stack">
+                          <img src={membersData[2].avatar} className="stack-avatar" />
+                          <img src={membersData[3].avatar} className="stack-avatar" />
+                          <img src={membersData[5].avatar} className="stack-avatar" />
+                        </div>
+                        <button className="card-action-btn">↗</button>
+                      </div>
+                    </div>
+                    <div className="card-depth-layer"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bottom-nav-container">
+              <div className="bottom-nav-bar">
+                <button className="nav-item active">🏠</button>
+                <button className="nav-item" onClick={onGoCalendar}>📅</button>
+                <button className="nav-item">🗂️</button>
+                <button className="nav-item">👤</button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // Screen 2: Calendar View
+      function CalendarScreen({ onBack, onGoDetail }) {
+        const [selectedDay, setSelectedDay] = React.useState(21);
+        const days = [
+          { num: 18, day: 'Mon' },
+          { num: 19, day: 'Tue' },
+          { num: 20, day: 'Wed' },
+          { num: 21, day: 'Thu' },
+          { num: 22, day: 'Fri' },
+          { num: 23, day: 'Sat' },
+          { num: 24, day: 'Sun' },
+        ];
+
+        return (
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
+            <div className="status-bar">
+              <span>9:41</span>
+              <div className="status-bar-icons">
+                <span>📶</span>
+                <span>🔋</span>
+              </div>
+            </div>
+
+            <div className="screen-content">
+              <div className="calendar-container">
+                <div className="calendar-header">
+                  <button className="icon-btn-round" onClick={onBack}>‹</button>
+                  <div className="calendar-title">Calendar</div>
+                  <button className="icon-btn-round">⋮</button>
+                </div>
+
+                <div className="month-label">August</div>
+
+                <div className="date-strip">
+                  {days.map((d) => (
+                    <div 
+                      key={d.num} 
+                      className={`date-capsule ${selectedDay === d.num ? 'active' : ''}`}
+                      onClick={() => setSelectedDay(d.num)}
+                    >
+                      <span className="day-num">{d.num}</span>
+                      <span className="day-name">{d.day}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="timeline-list">
+                  <div className="timeline-row">
+                    <div className="time-label">09.00 AM</div>
+                    <div className="event-card pink">
+                      <div className="event-card-top">
+                        <div>
+                          <div className="event-card-title">Research Plan</div>
+                          <div className="event-card-time">🕒 09.30-10.45</div>
+                        </div>
+                        <span>⋮</span>
+                      </div>
+                      <div className="event-assigned-row">
+                        <div>
+                          <div className="assigned-label">Assigned to</div>
+                          <div className="assigned-user-info">
+                            <img src={membersData[1].avatar} className="user-mini-avatar" />
+                            <span className="user-mini-name">Wade Warren</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="timeline-row">
+                    <div className="time-label">
+                      <div className="time-badge-pill">11:30 AM</div>
+                    </div>
+                    <div className="event-card yellow" onClick={onGoDetail}>
+                      <div className="event-card-top">
+                        <div>
+                          <div className="event-card-title">Team Meeting</div>
+                          <div className="event-card-time">🕒 11.30-12.00</div>
+                        </div>
+                        <span>⋮</span>
+                      </div>
+                      <div className="event-assigned-row">
+                        <div className="avatar-stack-mini">
+                          <img src={membersData[0].avatar} className="stack-img" />
+                          <img src={membersData[2].avatar} className="stack-img" />
+                          <img src={membersData[3].avatar} className="stack-img" />
+                          <div className="stack-more-badge">+3</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="timeline-row">
+                    <div className="time-label">12.00 PM</div>
+                  </div>
+
+                  <div className="timeline-row">
+                    <div className="time-label">01.00 PM</div>
+                    <div className="event-card blue">
+                      <div className="event-card-top">
+                        <div>
+                          <div className="event-card-title">Design Review on...</div>
+                          <div className="event-card-time">🕒 13.00-13.30</div>
+                        </div>
+                        <span>⋮</span>
+                      </div>
+                      <div className="event-assigned-row">
+                        <div>
+                          <div className="assigned-label">Assigned to</div>
+                          <div className="assigned-user-info">
+                            <img src={membersData[2].avatar} className="user-mini-avatar" />
+                            <span className="user-mini-name">Leslie Alexander</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="timeline-row">
+                    <div className="time-label">02.30 PM</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // Screen 3: Detail / Plan View
+      function TaskDetailScreen({ onClose }) {
+        const [plans, setPlans] = React.useState(initialPlans);
+
+        const toggleComplete = (id) => {
+          setPlans(plans.map(p => p.id === id ? { ...p, completed: !p.completed } : p));
+        };
+
+        return (
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
+            <div className="status-bar">
+              <span>9:41</span>
+              <div className="status-bar-icons">
+                <span>📶</span>
+                <span>🔋</span>
+              </div>
+            </div>
+
+            <div className="screen-content">
+              <div className="detail-container">
+                <div className="detail-header">
+                  <button className="icon-btn-round" onClick={onClose}>✕</button>
+                  <button className="icon-btn-round">✎</button>
+                </div>
+
+                <div className="time-range-badge-center">
+                  <div className="time-range-pill">11:30 AM - 12:00 PM</div>
+                </div>
+
+                <div className="meeting-title-block">
+                  <h2 className="meeting-main-title">Team Meeting</h2>
+                  <p className="meeting-subtitle">Discussion of tasks for the month</p>
+                </div>
+
+                <div className="attendees-stack-center">
+                  <img src={membersData[0].avatar} className="attendees-avatar" />
+                  <img src={membersData[1].avatar} className="attendees-avatar" />
+                  <img src={membersData[2].avatar} className="attendees-avatar" />
+                  <div className="attendees-more-badge">+5</div>
+                </div>
+
+                <div className="plan-section">
+                  <div className="plan-section-title">Plan</div>
+                  <div className="plan-cards-list">
+                    {plans.map((p) => (
+                      <div 
+                        key={p.id} 
+                        className={`plan-card ${p.color} ${p.completed ? 'completed' : ''}`}
+                        onClick={() => toggleComplete(p.id)}
+                      >
+                        <div className={`plan-card-text ${p.completed ? 'strike' : ''}`}>
+                          {p.title}
+                        </div>
+                        <div className="plan-card-time">{p.timeRange}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // Master App Container
+      function App() {
+        const [viewMode, setViewMode] = React.useState('showcase');
+        const [simTab, setSimTab] = React.useState('home');
+
+        return (
+          <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+            <header className="web-header">
+              <div className="brand-title">
+                <span>⚡</span>
+                <span>Caspian TeamOps</span>
+                <span className="brand-badge">Ditto UI</span>
+              </div>
+
+              <div className="mode-switcher">
+                <button 
+                  className={`mode-btn ${viewMode === 'showcase' ? 'active' : ''}`}
+                  onClick={() => setViewMode('showcase')}
+                >
+                  <span>📸 Ditto 3-Screen View</span>
+                </button>
+                <button 
+                  className={`mode-btn ${viewMode === 'simulator' ? 'active' : ''}`}
+                  onClick={() => setViewMode('simulator')}
+                >
+                  <span>📱 Interactive Simulator</span>
+                </button>
+                <button 
+                  className={`mode-btn ${viewMode === 'home' ? 'active' : ''}`}
+                  onClick={() => setViewMode('home')}
+                >
+                  <span>Home</span>
+                </button>
+                <button 
+                  className={`mode-btn ${viewMode === 'calendar' ? 'active' : ''}`}
+                  onClick={() => setViewMode('calendar')}
+                >
+                  <span>Calendar</span>
+                </button>
+                <button 
+                  className={`mode-btn ${viewMode === 'detail' ? 'active' : ''}`}
+                  onClick={() => setViewMode('detail')}
+                >
+                  <span>Plan Modal</span>
+                </button>
+              </div>
+            </header>
+
+            <main className="presentation-container">
+              {viewMode === 'showcase' && (
+                <div className="three-screen-grid">
+                  <div>
+                    <div className="phone-frame">
+                      <HomeScreen 
+                        onGoCalendar={() => { setViewMode('simulator'); setSimTab('calendar'); }}
+                        onGoDetail={() => { setViewMode('simulator'); setSimTab('detail'); }}
+                      />
+                    </div>
+                    <div className="screen-label">Dashboard View (Home)</div>
+                  </div>
+
+                  <div>
+                    <div className="phone-frame">
+                      <CalendarScreen 
+                        onBack={() => { setViewMode('simulator'); setSimTab('home'); }}
+                        onGoDetail={() => { setViewMode('simulator'); setSimTab('detail'); }}
+                      />
+                    </div>
+                    <div className="screen-label">Calendar & Schedule View</div>
+                  </div>
+
+                  <div>
+                    <div className="phone-frame">
+                      <TaskDetailScreen 
+                        onClose={() => { setViewMode('simulator'); setSimTab('calendar'); }}
+                      />
+                    </div>
+                    <div className="screen-label">Meeting Plan & Details Modal</div>
+                  </div>
+                </div>
+              )}
+
+              {viewMode === 'simulator' && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <div className="phone-frame">
+                    {simTab === 'home' && (
+                      <HomeScreen 
+                        onGoCalendar={() => setSimTab('calendar')}
+                        onGoDetail={() => setSimTab('detail')}
+                      />
+                    )}
+                    {simTab === 'calendar' && (
+                      <CalendarScreen 
+                        onBack={() => setSimTab('home')}
+                        onGoDetail={() => setSimTab('detail')}
+                      />
+                    )}
+                    {simTab === 'detail' && (
+                      <TaskDetailScreen 
+                        onClose={() => setSimTab('calendar')}
+                      />
+                    )}
+                  </div>
+                  <div className="screen-label">
+                    Interactive Mobile Simulator · Active: {simTab.toUpperCase()}
+                  </div>
+                </div>
+              )}
+
+              {viewMode === 'home' && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <div className="phone-frame">
+                    <HomeScreen 
+                      onGoCalendar={() => { setViewMode('simulator'); setSimTab('calendar'); }}
+                      onGoDetail={() => { setViewMode('simulator'); setSimTab('detail'); }}
+                    />
+                  </div>
+                  <div className="screen-label">Dashboard View (Home Screen)</div>
+                </div>
+              )}
+
+              {viewMode === 'calendar' && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <div className="phone-frame">
+                    <CalendarScreen 
+                      onBack={() => { setViewMode('simulator'); setSimTab('home'); }}
+                      onGoDetail={() => { setViewMode('simulator'); setSimTab('detail'); }}
+                    />
+                  </div>
+                  <div className="screen-label">Calendar & Schedule View</div>
+                </div>
+              )}
+
+              {viewMode === 'detail' && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <div className="phone-frame">
+                    <TaskDetailScreen 
+                      onClose={() => { setViewMode('simulator'); setSimTab('calendar'); }}
+                    />
+                  </div>
+                  <div className="screen-label">Meeting Plan & Task Detail View</div>
+                </div>
+              )}
+            </main>
+          </div>
+        );
+      }
+
+      ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+  </body>
+</html>

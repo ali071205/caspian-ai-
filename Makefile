@@ -7,3 +7,5 @@ mobile:
 	cd mobile && npm start
 caspian:
 	cd backend && python run_caspian.py
+connect-slack:
+	cd backend && python connect_caspian.py

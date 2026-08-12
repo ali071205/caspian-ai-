@@ -1,3 +1,17 @@
 import { Stack } from "expo-router";
 import { colors } from "../src/theme";
-export default function Layout() { return <Stack screenOptions={{ headerStyle: { backgroundColor: colors.canvas }, headerTintColor: colors.ink, headerShadowVisible: false, contentStyle: { backgroundColor: colors.canvas } }}><Stack.Screen name="index" options={{headerShown:false}}/><Stack.Screen name="inbox" options={{title:"TeamOps"}}/><Stack.Screen name="tasks" options={{title:"Today's tasks"}}/></Stack>; }
+
+export default function Layout() {
+  return (
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: colors.bgLight },
+      }}
+    >
+      <Stack.Screen name="index" />
+      <Stack.Screen name="calendar" />
+      <Stack.Screen name="plan" />
+    </Stack>
+  );
+}

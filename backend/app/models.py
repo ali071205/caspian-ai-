@@ -11,6 +11,7 @@ class TaskStatus(str, Enum):
     PENDING_ACK = "PENDING_ACK"
     TODO = "TODO"
     IN_PROGRESS = "IN_PROGRESS"
+    DELAYED = "DELAYED"
     BLOCKED = "BLOCKED"
     DONE = "DONE"
     CANCELLED = "CANCELLED"
@@ -40,6 +41,7 @@ class Task(Base):
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     deadline: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     status: Mapped[str] = mapped_column(String(32), default=TaskStatus.PENDING_ACK.value)
+    at_risk: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -68,6 +70,18 @@ class Event(Base):
     summary: Mapped[str] = mapped_column(Text)
     owner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class Connection(Base):
+    """A non-secret record of a Caspian transport connection."""
+    __tablename__ = "connections"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    channel: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    status: Mapped[str] = mapped_column(String(40), default="not_connected")
+    external_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    setup_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class ConversationSummary(Base):

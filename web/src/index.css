@@ -1,0 +1,985 @@
+/* CSS Reset & Variables */
+:root {
+  --font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  
+  /* Color Strategy from Reference Image */
+  --bg-presentation: #e4dcfa;
+  --bg-presentation-end: #d5c8f8;
+  
+  --color-purple-primary: #7c69ef;
+  --color-purple-dark: #6252db;
+  --color-purple-light: #f0ecfd;
+  
+  --color-pink-primary: #f856cf;
+  --color-pink-light: #fde6f8;
+  
+  --color-yellow-primary: #ffbe43;
+  --color-yellow-light: #fff6e0;
+  
+  --color-blue-primary: #55c3ff;
+  --color-blue-light: #e6f7ff;
+  
+  --color-dark-pill: #1c1d22;
+  --color-text-main: #121316;
+  --color-text-muted: #848792;
+  --color-bg-card: #ffffff;
+  
+  --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 8px 24px rgba(124, 105, 239, 0.15);
+  --shadow-lg: 0 16px 36px rgba(0, 0, 0, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-family);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background-color: #dcd3f9;
+  color: var(--color-text-main);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* App Header Web Bar */
+.web-header {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(124, 105, 239, 0.15);
+  padding: 14px 28px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+}
+
+.brand-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: -0.5px;
+  color: var(--color-text-main);
+}
+
+.brand-badge {
+  background: var(--color-purple-primary);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.mode-switcher {
+  display: flex;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 4px;
+  border-radius: 12px;
+  gap: 4px;
+}
+
+.mode-btn {
+  border: none;
+  background: transparent;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mode-btn:hover {
+  color: var(--color-purple-primary);
+}
+
+.mode-btn.active {
+  background: #ffffff;
+  color: var(--color-purple-primary);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  font-weight: 700;
+}
+
+/* Presentation Canvas */
+.presentation-container {
+  min-height: calc(100vh - 65px);
+  background: linear-gradient(135deg, var(--bg-presentation) 0%, var(--bg-presentation-end) 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+}
+
+/* Side by Side 3 Screen Mockup Grid */
+.three-screen-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 36px;
+  max-width: 1350px;
+  width: 100%;
+  padding: 20px 0;
+}
+
+/* Phone Outer Wrapper Frame */
+.phone-frame {
+  width: 360px;
+  height: 740px;
+  background: #ffffff;
+  border-radius: 46px;
+  box-shadow: 
+    0 24px 48px -12px rgba(98, 82, 219, 0.25),
+    0 8px 16px -4px rgba(0, 0, 0, 0.06),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.8);
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+}
+
+.phone-frame:hover {
+  transform: translateY(-6px);
+  box-shadow: 
+    0 32px 64px -12px rgba(98, 82, 219, 0.32),
+    0 12px 24px -4px rgba(0, 0, 0, 0.08);
+}
+
+/* Screen Title Label under frame */
+.screen-label {
+  text-align: center;
+  margin-top: 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #61587d;
+  letter-spacing: 0.2px;
+}
+
+/* Status Bar */
+.status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 24px 4px 24px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text-main);
+  background: transparent;
+  z-index: 10;
+}
+
+.status-bar-icons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.screen-content {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: #ffffff;
+  padding-bottom: 20px;
+  scrollbar-width: none; /* Firefox */
+}
+
+.screen-content::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
+}
+
+/* --- SCREEN 1: HOME SCREEN STYLES --- */
+.home-container {
+  padding: 16px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.home-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.profile-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.avatar-main {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #ffffff;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+}
+
+.greeting-text {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.user-name {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--color-text-main);
+}
+
+.bell-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid #ebebeb;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+}
+
+.notification-dot {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 7px;
+  height: 7px;
+  background: #ff3b30;
+  border-radius: 50%;
+}
+
+.home-hero-title {
+  font-size: 26px;
+  line-height: 1.25;
+  color: var(--color-text-main);
+}
+
+.home-hero-title .light {
+  font-weight: 400;
+  color: #2c2d30;
+}
+
+.home-hero-title .bold {
+  font-weight: 800;
+  display: block;
+}
+
+/* Members Section */
+.members-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.members-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.members-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--color-text-main);
+}
+
+.add-member-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--color-purple-primary);
+  color: #ffffff;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.add-member-btn:hover {
+  transform: scale(1.08);
+}
+
+.members-avatars-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+}
+
+.member-avatar-circle {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.member-avatar-circle:hover {
+  transform: translateY(-2px) scale(1.05);
+}
+
+/* Next Task Hero Card */
+.next-task-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.next-task-heading {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--color-text-main);
+}
+
+/* Stacked Card Container */
+.stacked-card-wrapper {
+  position: relative;
+  margin-bottom: 12px;
+}
+
+/* Underneath card depth layer */
+.card-depth-layer {
+  position: absolute;
+  bottom: -8px;
+  left: 10px;
+  right: 10px;
+  height: 40px;
+  background: #9484f7;
+  border-radius: 24px;
+  z-index: 1;
+  opacity: 0.6;
+}
+
+.hero-task-card {
+  position: relative;
+  z-index: 2;
+  background: var(--color-purple-primary);
+  border-radius: 28px;
+  padding: 22px;
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 250px;
+  box-shadow: 0 14px 30px rgba(124, 105, 239, 0.35);
+  overflow: hidden;
+}
+
+.hero-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.hero-card-title {
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.3;
+  max-width: 170px;
+}
+
+.hero-card-subtitle {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+  margin-top: 4px;
+  font-weight: 500;
+}
+
+/* 3D Graphics Illustration inside Hero Card */
+.hero-card-illustration {
+  position: absolute;
+  right: 16px;
+  top: 20px;
+  width: 120px;
+  height: 140px;
+  pointer-events: none;
+}
+
+.isometric-box {
+  width: 70px;
+  height: 70px;
+  background: linear-gradient(135deg, #ffc069 0%, #fa8c16 100%);
+  border-radius: 16px;
+  transform: rotate(-12deg) rotateX(20deg);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  right: 10px;
+  top: 15px;
+}
+
+.floating-icon-bubble {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.bubble-qmark {
+  width: 32px;
+  height: 32px;
+  left: -10px;
+  top: 10px;
+  background: #00cebe;
+  color: #fff;
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.bubble-hourglass {
+  width: 28px;
+  height: 28px;
+  right: -6px;
+  top: -8px;
+  background: #ffffff;
+  color: #ff9500;
+}
+
+.bubble-heart {
+  width: 26px;
+  height: 26px;
+  left: 10px;
+  bottom: 0px;
+  background: #ff2d55;
+  color: #ffffff;
+}
+
+/* Hero Card Bottom */
+.hero-card-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-top: auto;
+  z-index: 3;
+}
+
+.hero-assigned-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hero-assigned-stack .stack-avatars {
+  display: flex;
+  margin-left: 6px;
+}
+
+.hero-assigned-stack .stack-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px solid var(--color-purple-primary);
+  margin-left: -8px;
+  object-fit: cover;
+}
+
+.card-action-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-main);
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  transition: transform 0.2s ease, background-color 0.2s ease;
+}
+
+.card-action-btn:hover {
+  transform: scale(1.08);
+  background: #f8f8f8;
+}
+
+/* Floating Bottom Navigation Bar */
+.bottom-nav-container {
+  position: absolute;
+  bottom: 14px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  z-index: 20;
+  padding: 0 20px;
+}
+
+.bottom-nav-bar {
+  background: var(--color-dark-pill);
+  height: 60px;
+  border-radius: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 0 10px;
+  width: 100%;
+  max-width: 300px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+}
+
+.nav-item {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #7b7e8c;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.nav-item.active {
+  background: var(--color-purple-primary);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(124, 105, 239, 0.4);
+}
+
+/* --- SCREEN 2: CALENDAR SCREEN STYLES --- */
+.calendar-container {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.calendar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.icon-btn-round {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid #ededed;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-main);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.icon-btn-round:hover {
+  background: #f5f5f5;
+}
+
+.calendar-title {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--color-text-main);
+}
+
+.month-label {
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #555866;
+  margin-top: 2px;
+}
+
+/* Date Strip Selector */
+.date-strip {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.date-capsule {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 8px;
+  border-radius: 20px;
+  width: 42px;
+  gap: 2px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.date-capsule .day-num {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--color-text-main);
+}
+
+.date-capsule .day-name {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.date-capsule.active {
+  background: var(--color-purple-primary);
+  box-shadow: 0 6px 16px rgba(124, 105, 239, 0.35);
+}
+
+.date-capsule.active .day-num,
+.date-capsule.active .day-name {
+  color: #ffffff;
+}
+
+/* Timeline List */
+.timeline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 10px;
+  position: relative;
+}
+
+.timeline-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.time-label {
+  width: 60px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #a0a3b1;
+  padding-top: 12px;
+}
+
+.time-badge-pill {
+  background: var(--color-dark-pill);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 6px 10px;
+  border-radius: 14px;
+  display: inline-block;
+}
+
+/* Calendar Event Cards */
+.event-card {
+  flex: 1;
+  border-radius: 22px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.04);
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  min-height: 105px;
+}
+
+.event-card:hover {
+  transform: scale(1.02);
+  box-shadow: 0 10px 22px rgba(0,0,0,0.08);
+}
+
+.event-card.pink {
+  background: var(--color-pink-primary);
+  color: #ffffff;
+}
+
+.event-card.yellow {
+  background: var(--color-yellow-primary);
+  color: var(--color-text-main);
+}
+
+.event-card.blue {
+  background: var(--color-blue-primary);
+  color: #ffffff;
+}
+
+.event-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.event-card-title {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.event-card-time {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  opacity: 0.9;
+  margin-top: 4px;
+  font-weight: 600;
+}
+
+.event-assigned-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14px;
+}
+
+.assigned-label {
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+.assigned-user-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.user-mini-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.user-mini-name {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.avatar-stack-mini {
+  display: flex;
+  align-items: center;
+}
+
+.stack-img {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1.5px solid #ffffff;
+  margin-left: -6px;
+  object-fit: cover;
+}
+
+.stack-img:first-child {
+  margin-left: 0;
+}
+
+.stack-more-badge {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--color-dark-pill);
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: -6px;
+  border: 1.5px solid #ffffff;
+}
+
+/* --- SCREEN 3: TASK DETAIL & PLAN SCREEN STYLES --- */
+.detail-container {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.time-range-badge-center {
+  display: flex;
+  justify-content: center;
+  margin-top: 4px;
+}
+
+.time-range-pill {
+  background: var(--color-dark-pill);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 8px 20px;
+  border-radius: 20px;
+  letter-spacing: 0.2px;
+}
+
+.meeting-title-block {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+}
+
+.meeting-main-title {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--color-text-main);
+}
+
+.meeting-subtitle {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.attendees-stack-center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.attendees-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  margin-left: -10px;
+  object-fit: cover;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+
+.attendees-avatar:first-child {
+  margin-left: 0;
+}
+
+.attendees-more-badge {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--color-dark-pill);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: -10px;
+  border: 2px solid #ffffff;
+}
+
+/* Plan Section */
+.plan-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.plan-section-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--color-text-main);
+}
+
+.plan-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.plan-card {
+  border-radius: 22px;
+  padding: 18px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.04);
+  cursor: pointer;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.plan-card:hover {
+  transform: translateY(-2px);
+}
+
+.plan-card.completed {
+  opacity: 0.65;
+}
+
+.plan-card.purple {
+  background: var(--color-purple-primary);
+  color: #ffffff;
+}
+
+.plan-card.yellow {
+  background: var(--color-yellow-primary);
+  color: var(--color-text-main);
+}
+
+.plan-card.pink {
+  background: var(--color-pink-primary);
+  color: #ffffff;
+}
+
+.plan-card-text {
+  font-size: 14px;
+  font-weight: 700;
+  max-width: 190px;
+  line-height: 1.35;
+}
+
+.plan-card-text.strike {
+  text-decoration: line-through;
+}
+
+.plan-card-time {
+  font-size: 11px;
+  font-weight: 700;
+  opacity: 0.9;
+  white-space: nowrap;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1150px) {
+  .three-screen-grid {
+    gap: 24px;
+  }
+  .phone-frame {
+    width: 320px;
+    height: 680px;
+  }
+}

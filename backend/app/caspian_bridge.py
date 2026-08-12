@@ -18,7 +18,13 @@ def load_caspian_environment() -> None:
 
 def sender_address(sender: Any) -> str:
     if isinstance(sender, dict):
-        return str(sender.get("address") or sender.get("email") or "").strip().casefold()
+        return str(
+            sender.get("address")
+            or sender.get("email")
+            or sender.get("id")
+            or sender.get("user_id")
+            or ""
+        ).strip().casefold()
     return ""
 
 
