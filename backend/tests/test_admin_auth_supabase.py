@@ -84,7 +84,7 @@ def test_member_login_flow(client):
     })
 
     # Member logs in
-    res = client.post("/auth/member/login", json={"name": "Devon"})
+    res = client.post("/auth/member/login", json={"name": "Devon", "team_code": "CASPIAN-2026"})
     assert res.status_code == 200
     assert res.json()["name"] == "Devon"
     assert "token" in res.json()

@@ -3,23 +3,22 @@ import {
   View,
   Text,
   StyleSheet,
-  Image,
   TouchableOpacity,
   ScrollView,
-  SafeAreaView,
   StatusBar,
   TextInput,
   Modal,
   Alert,
   ActivityIndicator,
+  Platform,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import { colors } from "../src/theme";
-import { membersData } from "../src/data";
 import { getTasks, setTaskStatus, createTask, getMembers, Task, Member, TaskStatus } from "../src/api";
+import { AppIcon } from "../src/components/Icons";
 
 export default function CalendarScreen() {
-  const [selectedDay, setSelectedDay] = useState(20);
+  const [selectedDay, setSelectedDay] = useState(16);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,15 +26,11 @@ export default function CalendarScreen() {
   const [newTitle, setNewTitle] = useState("");
   const [newOwnerId, setNewOwnerId] = useState(1);
   const [submitting, setSubmitting] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<"ACTIVE" | "DONE" | "ALL">("ACTIVE");
 
   const days = [
-    { num: 16, day: "Sun" },
-    { num: 17, day: "Mon" },
-    { num: 18, day: "Tue" },
-    { num: 19, day: "Wed" },
-    { num: 20, day: "Thu" },
-    { num: 21, day: "Fri" },
-    { num: 22, day: "Sat" },
+    { num: 16, day: "Sun" }, { num: 17, day: "Mon" }, { num: 18, day: "Tue" },
+    { num: 19, day: "Wed" }, { num: 20, day: "Thu" }, { num: 21, day: "Fri" }, { num: 22, day: "Sat" },
   ];
 
   const loadData = useCallback(async () => {
@@ -52,25 +47,20 @@ export default function CalendarScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  useEffect(() => { loadData(); }, [loadData]);
 
   const handleStatusChange = async (taskId: number, newStatus: TaskStatus) => {
     try {
+      setTasks(prev => prev.map(item => item.id === taskId ? { ...item, status: newStatus } : item));
       await setTaskStatus(taskId, newStatus);
-      Alert.alert("Status Updated", `Task #${taskId} is now ${newStatus}`);
-      loadData();
     } catch (err: any) {
       Alert.alert("Error", err.message || "Failed to update status");
+      loadData();
     }
   };
 
   const handleCreateTask = async () => {
-    if (!newTitle.trim()) {
-      Alert.alert("Required", "Please enter a task title.");
-      return;
-    }
+    if (!newTitle.trim()) return Alert.alert("Required", "Please enter task title.");
     setSubmitting(true);
     try {
       await createTask({
@@ -80,7 +70,6 @@ export default function CalendarScreen() {
       });
       setNewTitle("");
       setCreateModalVisible(false);
-      Alert.alert("Task Created", "Task assigned and added to calendar!");
       loadData();
     } catch (err: any) {
       Alert.alert("Error", err.message || "Failed to create task");
@@ -89,43 +78,53 @@ export default function CalendarScreen() {
     }
   };
 
-  const displayTasks = tasks.length > 0 ? tasks : [
-    { id: 1, title: "Healthcare Dashboard UI", description: "Design Team", owner_id: 1, deadline: "2026-08-20T18:00:00", status: "IN_PROGRESS" as const, at_risk: false },
-    { id: 2, title: "Automated Regression Test Suite", description: "QA Lead", owner_id: 2, deadline: "2026-08-20T18:00:00", status: "TODO" as const, at_risk: false },
-  ];
+  const selectedDate = new Date(2026, 7, selectedDay);
+  const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const selectedDayTime = startOfDay(selectedDate);
+  const todayTime = startOfDay(new Date());
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  const isIncomplete = (task: Task) => task.status !== "DONE" && task.status !== "CANCELLED";
+  const isOverdueOnSelectedDay = (task: Task) => {
+    if (!task.deadline || !isIncomplete(task)) return false;
+    const deadlineDay = startOfDay(new Date(task.deadline));
+    return selectedDayTime === todayTime && deadlineDay === selectedDayTime - oneDayMs;
+  };
+  const scheduledTasks = tasks.filter((task) => {
+    if (!task.deadline) return false;
+    const deadlineDay = startOfDay(new Date(task.deadline));
+    const isDueOnSelectedDay = deadlineDay === selectedDayTime;
+    const isYesterdayCarryOver =
+      selectedDayTime === todayTime &&
+      deadlineDay === selectedDayTime - oneDayMs &&
+      isIncomplete(task);
+    return isDueOnSelectedDay || isYesterdayCarryOver;
+  });
+  const activeTasks = scheduledTasks.filter(isIncomplete);
+  const completedTasks = scheduledTasks.filter(t => t.status === "DONE");
+  const displayTasks = statusFilter === "ACTIVE" ? activeTasks : statusFilter === "DONE" ? completedTasks : scheduledTasks;
 
   return (
     <SafeAreaView style={styles.safeContainer}>
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
       <View style={styles.container}>
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
           {/* Header */}
           <View style={styles.header}>
-            <TouchableOpacity
-              style={styles.iconBtnRound}
-              onPress={() => router.back()}
-            >
-              <Text style={styles.backArrow}>‹</Text>
+            <TouchableOpacity style={styles.iconBtn} onPress={() => router.back()}>
+              <AppIcon name="arrow-back" size={20} color="#1c1c1e" />
             </TouchableOpacity>
-
-            <Text style={styles.headerTitle}>Task Calendar</Text>
-
-            <TouchableOpacity 
-              style={styles.iconBtnRound}
-              onPress={() => setCreateModalVisible(true)}
-            >
-              <Text style={styles.plusIcon}>+</Text>
+            <Text style={styles.headerTitle}>Task Calendar & Schedule</Text>
+            <TouchableOpacity style={styles.iconBtn} onPress={() => setCreateModalVisible(true)}>
+              <AppIcon name="add" size={20} color="#7c69ef" />
             </TouchableOpacity>
           </View>
 
-          {/* Month Label */}
+          {/* Month & Sync */}
           <View style={styles.monthRow}>
             <Text style={styles.monthLabel}>August 2026</Text>
-            <TouchableOpacity onPress={loadData}>
-              <Text style={styles.refreshText}>🔄 Refresh</Text>
+            <TouchableOpacity style={styles.refreshBtn} onPress={loadData}>
+              <AppIcon name="refresh" size={13} color="#7c69ef" />
+              <Text style={styles.refreshText}>Sync</Text>
             </TouchableOpacity>
           </View>
 
@@ -134,164 +133,118 @@ export default function CalendarScreen() {
             {days.map((d) => (
               <TouchableOpacity
                 key={d.num}
-                style={[
-                  styles.dateItem,
-                  selectedDay === d.num && styles.dateItemActive,
-                ]}
+                style={[styles.dateItem, selectedDay === d.num && styles.dateItemActive]}
                 onPress={() => setSelectedDay(d.num)}
-                activeOpacity={0.7}
               >
-                <Text
-                  style={[
-                    styles.dateNum,
-                    selectedDay === d.num && styles.dateNumActive,
-                  ]}
-                >
-                  {d.num}
-                </Text>
-                <Text
-                  style={[
-                    styles.dateDay,
-                    selectedDay === d.num && styles.dateDayActive,
-                  ]}
-                >
-                  {d.day}
-                </Text>
+                <Text style={[styles.dateNum, selectedDay === d.num && styles.dateNumActive]}>{d.num}</Text>
+                <Text style={[styles.dateDay, selectedDay === d.num && styles.dateDayActive]}>{d.day}</Text>
               </TouchableOpacity>
             ))}
           </View>
 
-          {/* Schedule Section */}
-          <View style={styles.scheduleSection}>
-            <View style={styles.scheduleHeaderRow}>
-              <Text style={styles.sectionHeading}>Scheduled Directives</Text>
-              <TouchableOpacity 
-                style={styles.addBtnSmall}
-                onPress={() => setCreateModalVisible(true)}
+          {/* Filter Tabs */}
+          <View style={styles.filterTabsRow}>
+            {[
+              { key: "ACTIVE", label: `⚡ Active (${activeTasks.length})` },
+              { key: "DONE", label: `✓ Done (${completedTasks.length})` },
+              { key: "ALL", label: `All (${scheduledTasks.length})` },
+            ].map((f) => (
+              <TouchableOpacity
+                key={f.key}
+                style={[styles.filterTab, statusFilter === f.key && styles.filterTabActive]}
+                onPress={() => setStatusFilter(f.key as any)}
               >
-                <Text style={styles.addBtnSmallText}>+ New Task</Text>
+                <Text style={[styles.filterTabText, statusFilter === f.key && styles.filterTabTextActive]}>{f.label}</Text>
               </TouchableOpacity>
-            </View>
+            ))}
+          </View>
 
-            {loading ? (
-              <ActivityIndicator color="#7c69ef" style={{ marginVertical: 20 }} />
-            ) : (
-              displayTasks.map((t) => (
-                <View key={t.id} style={styles.taskCard}>
-                  <View style={styles.taskCardHeader}>
-                    <Text style={styles.taskCardTitle}>{t.title}</Text>
-                    <View style={[styles.statusBadge, t.status === "DONE" ? styles.statusDone : t.status === "BLOCKED" ? styles.statusBlocked : styles.statusProgress]}>
-                      <Text style={styles.statusBadgeText}>{t.status}</Text>
+          {/* Tasks List */}
+          {loading ? (
+            <ActivityIndicator color="#7c69ef" style={{ marginVertical: 20 }} />
+          ) : displayTasks.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyTitle}>No scheduled tasks</Text>
+              <Text style={styles.emptySub}>Tap "+" above to assign work for August {selectedDay}.</Text>
+            </View>
+          ) : (
+            displayTasks.map((t) => {
+              const owner = members.find(m => m.id === t.owner_id);
+              const isDone = t.status === "DONE";
+              const isOverdue = isOverdueOnSelectedDay(t);
+              return (
+                <View key={t.id} style={[styles.taskCard, isDone && styles.taskCardDone, isOverdue && styles.taskCardOverdue]}>
+                  <View style={styles.taskHeader}>
+                    <View style={{ flex: 1 }}>
+                      {isOverdue && <Text style={styles.overdueWarning}>⚠ Overdue from {new Date(t.deadline!).toLocaleDateString()}</Text>}
+                      <Text style={[styles.taskTitle, isDone && styles.taskTitleDone]}>{t.title}</Text>
+                      <Text style={styles.taskMeta}>👤 {owner?.name || `Member #${t.owner_id}`} · Status: {t.status}</Text>
+                    </View>
+                    <View style={styles.actionPills}>
+                      <TouchableOpacity
+                        style={[styles.statusPill, isDone && styles.statusPillDone]}
+                        onPress={() => handleStatusChange(t.id, isDone ? "IN_PROGRESS" : "DONE")}
+                      >
+                        <Text style={[styles.statusPillText, isDone && styles.statusPillTextDone]}>
+                          {isDone ? "✓ Done" : "○ Mark Done"}
+                        </Text>
+                      </TouchableOpacity>
                     </View>
                   </View>
-
-                  <Text style={styles.taskCardMeta}>
-                    Owner ID: #{t.owner_id} · Due: {t.deadline ? new Date(t.deadline).toLocaleDateString() : "Thursday"}
-                  </Text>
-
-                  {/* Status Action Buttons */}
-                  <View style={styles.actionPillsRow}>
-                    <TouchableOpacity 
-                      style={[styles.statusPill, t.status === "IN_PROGRESS" && styles.statusPillActive]}
-                      onPress={() => handleStatusChange(t.id, "IN_PROGRESS")}
-                    >
-                      <Text style={styles.statusPillText}>In Progress</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity 
-                      style={[styles.statusPill, t.status === "BLOCKED" && styles.statusPillActive]}
-                      onPress={() => handleStatusChange(t.id, "BLOCKED")}
-                    >
-                      <Text style={styles.statusPillText}>Blocked</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity 
-                      style={[styles.statusPill, styles.statusPillDone, t.status === "DONE" && styles.statusPillActive]}
-                      onPress={() => handleStatusChange(t.id, "DONE")}
-                    >
-                      <Text style={styles.statusPillText}>Done ✓</Text>
-                    </TouchableOpacity>
-                  </View>
                 </View>
-              ))
-            )}
-          </View>
+              );
+            })
+          )}
         </ScrollView>
+
+        {/* Floating Bottom Nav */}
+        <View style={styles.bottomNav}>
+          <TouchableOpacity style={styles.navItem} onPress={() => router.push("/")}>
+            <AppIcon name="home" variant="outline" size={22} color="#9aa5b8" />
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.navItem, styles.navItemActive]}>
+            <AppIcon name="library" variant="filled" size={22} color="#7c69ef" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.navItem} onPress={() => router.push("/plan")}>
+            <AppIcon name="edit" variant="outline" size={22} color="#9aa5b8" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.navItem} onPress={() => router.push("/project")}>
+            <AppIcon name="categories" variant="outline" size={22} color="#9aa5b8" />
+          </TouchableOpacity>
+        </View>
 
         {/* Create Task Modal */}
         <Modal visible={createModalVisible} transparent animationType="slide">
           <View style={styles.modalOverlay}>
             <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>Create New Task</Text>
-
+              <Text style={styles.modalTitle}>Assign New Directive</Text>
               <Text style={styles.inputLabel}>Task Title</Text>
-              <TextInput
-                style={styles.modalInput}
-                placeholder="e.g. Implement Figma login screen"
-                placeholderTextColor="#777"
-                value={newTitle}
-                onChangeText={setNewTitle}
-              />
+              <TextInput style={styles.modalInput} placeholder="e.g. Audit database indexing" value={newTitle} onChangeText={setNewTitle} />
 
-              <Text style={styles.inputLabel}>Assign to Member</Text>
+              <Text style={styles.inputLabel}>Assignee</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
-                {(members.length > 0 ? members : [{ id: 1, name: "Ali", role: "Lead" }]).map((m) => (
+                {members.map(m => (
                   <TouchableOpacity
                     key={m.id}
                     style={[styles.memberChoice, newOwnerId === m.id && styles.memberChoiceActive]}
                     onPress={() => setNewOwnerId(m.id)}
                   >
-                    <Text style={[styles.memberChoiceText, newOwnerId === m.id && styles.memberChoiceTextActive]}>
-                      {m.name} ({m.role?.split(" ")[0]})
-                    </Text>
+                    <Text style={[styles.memberChoiceText, newOwnerId === m.id && styles.memberChoiceTextActive]}>👤 {m.name}</Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
 
               <View style={styles.modalBtnRow}>
-                <TouchableOpacity
-                  style={styles.cancelBtn}
-                  onPress={() => setCreateModalVisible(false)}
-                >
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setCreateModalVisible(false)}>
                   <Text style={styles.cancelBtnText}>Cancel</Text>
                 </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.createBtn}
-                  onPress={handleCreateTask}
-                  disabled={submitting}
-                >
-                  {submitting ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text style={styles.createBtnText}>Assign & Save</Text>
-                  )}
+                <TouchableOpacity style={styles.submitBtn} onPress={handleCreateTask} disabled={submitting}>
+                  {submitting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.submitBtnText}>Create Task</Text>}
                 </TouchableOpacity>
               </View>
             </View>
           </View>
         </Modal>
-
-        {/* Bottom Navigation */}
-        <View style={styles.bottomNav}>
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => router.push("/")}
-          >
-            <Text style={styles.navIcon}>🏠</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={[styles.navItem, styles.navItemActive]}>
-            <Text style={styles.navIcon}>📅</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => router.push("/plan")}
-          >
-            <Text style={styles.navIcon}>📋</Text>
-          </TouchableOpacity>
-        </View>
       </View>
     </SafeAreaView>
   );
@@ -301,300 +254,60 @@ const styles = StyleSheet.create({
   safeContainer: {
     flex: 1,
     backgroundColor: "#ffffff",
+    paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight || 24) + 6 : 0,
   },
-  container: {
-    flex: 1,
-    backgroundColor: "#f7f8fc",
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 100,
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  iconBtnRound: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#ffffff",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#e5e5ea",
-  },
-  backArrow: {
-    fontSize: 22,
-    color: "#1c1c1e",
-    fontWeight: "600",
-  },
-  plusIcon: {
-    fontSize: 20,
-    color: "#7c69ef",
-    fontWeight: "700",
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#1c1c1e",
-  },
-  monthRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 14,
-  },
-  monthLabel: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: "#1c1c1e",
-  },
-  refreshText: {
-    fontSize: 12,
-    color: "#7c69ef",
-    fontWeight: "600",
-  },
-  dateStrip: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 24,
-  },
-  dateItem: {
-    alignItems: "center",
-    justifyContent: "center",
-    width: 42,
-    height: 64,
-    borderRadius: 21,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e5e5ea",
-  },
-  dateItemActive: {
-    backgroundColor: "#1c1c1e",
-    borderColor: "#1c1c1e",
-  },
-  dateNum: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#1c1c1e",
-  },
-  dateNumActive: {
-    color: "#ffffff",
-  },
-  dateDay: {
-    fontSize: 11,
-    color: "#8e8e93",
-    marginTop: 2,
-  },
-  dateDayActive: {
-    color: "rgba(255, 255, 255, 0.7)",
-  },
-  scheduleSection: {
-    marginBottom: 20,
-  },
-  scheduleHeaderRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 14,
-  },
-  sectionHeading: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#1c1c1e",
-  },
-  addBtnSmall: {
-    backgroundColor: "#7c69ef",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  addBtnSmallText: {
-    color: "#fff",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  taskCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 18,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#e5e5ea",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  taskCardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 6,
-  },
-  taskCardTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#1c1c1e",
-    flex: 1,
-    marginRight: 8,
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  statusProgress: {
-    backgroundColor: "rgba(124, 105, 239, 0.15)",
-  },
-  statusBlocked: {
-    backgroundColor: "rgba(239, 68, 68, 0.15)",
-  },
-  statusDone: {
-    backgroundColor: "rgba(34, 197, 94, 0.15)",
-  },
-  statusBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#1c1c1e",
-  },
-  taskCardMeta: {
-    fontSize: 12,
-    color: "#8e8e93",
-    marginBottom: 12,
-  },
-  actionPillsRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  statusPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-    backgroundColor: "#f2f2f7",
-  },
-  statusPillActive: {
-    backgroundColor: "#7c69ef",
-  },
-  statusPillDone: {
-    backgroundColor: "#e8f9ed",
-  },
-  statusPillText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#1c1c1e",
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  modalCard: {
-    width: "100%",
-    maxWidth: 380,
-    backgroundColor: "#161824",
-    borderRadius: 20,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: "rgba(124, 105, 239, 0.3)",
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#fff",
-    marginBottom: 16,
-  },
-  inputLabel: {
-    fontSize: 12,
-    color: "#9aa5b8",
-    marginBottom: 6,
-  },
-  modalInput: {
-    backgroundColor: "#0e1017",
-    borderWidth: 1,
-    borderColor: "#2d3142",
-    borderRadius: 8,
-    color: "#fff",
-    padding: 10,
-    fontSize: 13,
-    marginBottom: 14,
-  },
-  memberChoice: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: "#212433",
-    marginRight: 8,
-  },
-  memberChoiceActive: {
-    backgroundColor: "#7c69ef",
-  },
-  memberChoiceText: {
-    color: "#aaa",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  memberChoiceTextActive: {
-    color: "#fff",
-  },
-  modalBtnRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 10,
-  },
-  cancelBtn: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: "#212433",
-    alignItems: "center",
-  },
-  cancelBtnText: {
-    color: "#aaa",
-    fontWeight: "600",
-  },
-  createBtn: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: "#7c69ef",
-    alignItems: "center",
-  },
-  createBtnText: {
-    color: "#fff",
-    fontWeight: "700",
-  },
-  bottomNav: {
-    position: "absolute",
-    bottom: 20,
-    left: 20,
-    right: 20,
-    height: 64,
-    backgroundColor: "#1c1c1e",
-    borderRadius: 32,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-around",
-    paddingHorizontal: 10,
-  },
-  navItem: {
-    width: 44,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 22,
-  },
-  navItemActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.15)",
-  },
-  navIcon: {
-    fontSize: 20,
-  },
+  container: { flex: 1, backgroundColor: "#f7f8fc" },
+  scrollContent: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 100 },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
+  iconBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#ffffff", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#e5e5ea" },
+  headerTitle: { fontSize: 16, fontWeight: "700", color: "#1c1c1e" },
+  monthRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  monthLabel: { fontSize: 17, fontWeight: "800", color: "#1c1c1e" },
+  refreshBtn: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(124, 105, 239, 0.08)", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  refreshText: { fontSize: 12, color: "#7c69ef", fontWeight: "600" },
+  dateStrip: { flexDirection: "row", justifyContent: "space-between", marginBottom: 14 },
+  dateItem: { alignItems: "center", justifyContent: "center", width: 42, height: 56, borderRadius: 16, backgroundColor: "#ffffff", borderWidth: 1, borderColor: "#e5e5ea" },
+  dateItemActive: { backgroundColor: "#7c69ef", borderColor: "#7c69ef" },
+  dateNum: { fontSize: 15, fontWeight: "700", color: "#1c1c1e" },
+  dateNumActive: { color: "#ffffff" },
+  dateDay: { fontSize: 10, color: "#8e8e93", marginTop: 2 },
+  dateDayActive: { color: "rgba(255, 255, 255, 0.8)" },
+  filterTabsRow: { flexDirection: "row", backgroundColor: "#e5e5ea", borderRadius: 10, padding: 3, marginBottom: 14, gap: 4 },
+  filterTab: { flex: 1, paddingVertical: 7, borderRadius: 8, alignItems: "center" },
+  filterTabActive: { backgroundColor: "#ffffff" },
+  filterTabText: { fontSize: 11, fontWeight: "600", color: "#8e8e93" },
+  filterTabTextActive: { color: "#1c1c1e", fontWeight: "700" },
+  emptyCard: { backgroundColor: "#ffffff", borderRadius: 14, padding: 24, alignItems: "center", borderWidth: 1, borderColor: "#e5e5ea" },
+  emptyTitle: { fontSize: 14, fontWeight: "700", color: "#1c1c1e", marginBottom: 4 },
+  emptySub: { fontSize: 12, color: "#8e8e93" },
+  taskCard: { backgroundColor: "#ffffff", borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: "#e5e5ea" },
+  taskCardDone: { backgroundColor: "#f9fafb", opacity: 0.75 },
+  taskCardOverdue: { borderColor: "#f59e0b", borderLeftWidth: 4 },
+  taskHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  taskTitle: { fontSize: 14, fontWeight: "700", color: "#1c1c1e", marginBottom: 4 },
+  taskTitleDone: { textDecorationLine: "line-through", color: "#9ca3af" },
+  overdueWarning: { color: "#b45309", fontSize: 10, fontWeight: "800", marginBottom: 4 },
+  taskMeta: { fontSize: 11, color: "#6b7280" },
+  actionPills: { flexDirection: "row", gap: 6 },
+  statusPill: { paddingVertical: 5, paddingHorizontal: 10, borderRadius: 8, backgroundColor: "rgba(124, 105, 239, 0.1)", borderWidth: 1, borderColor: "rgba(124, 105, 239, 0.3)" },
+  statusPillDone: { backgroundColor: "rgba(34, 197, 94, 0.15)", borderColor: "rgba(34, 197, 94, 0.4)" },
+  statusPillText: { fontSize: 11, fontWeight: "700", color: "#7c69ef" },
+  statusPillTextDone: { color: "#16a34a" },
+  bottomNav: { position: "absolute", bottom: 20, left: 20, right: 20, backgroundColor: "#161826", borderRadius: 24, flexDirection: "row", justifyContent: "space-around", paddingVertical: 10, elevation: 8 },
+  navItem: { padding: 8, borderRadius: 14 },
+  navItemActive: { backgroundColor: "rgba(124, 105, 239, 0.2)" },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0, 0, 0, 0.6)", justifyContent: "flex-end" },
+  modalCard: { backgroundColor: "#ffffff", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 32 },
+  modalTitle: { fontSize: 17, fontWeight: "800", color: "#1c1c1e", marginBottom: 14 },
+  inputLabel: { fontSize: 12, fontWeight: "600", color: "#4b5563", marginBottom: 6 },
+  modalInput: { backgroundColor: "#f3f4f6", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, color: "#1c1c1e", marginBottom: 12 },
+  memberChoice: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, backgroundColor: "#f3f4f6", marginRight: 8 },
+  memberChoiceActive: { backgroundColor: "#7c69ef" },
+  memberChoiceText: { fontSize: 11, fontWeight: "600", color: "#4b5563" },
+  memberChoiceTextActive: { color: "#ffffff" },
+  modalBtnRow: { flexDirection: "row", gap: 10 },
+  cancelBtn: { flex: 1, paddingVertical: 11, borderRadius: 8, backgroundColor: "#f3f4f6", alignItems: "center" },
+  cancelBtnText: { color: "#4b5563", fontSize: 13, fontWeight: "600" },
+  submitBtn: { flex: 2, paddingVertical: 11, borderRadius: 8, backgroundColor: "#7c69ef", alignItems: "center" },
+  submitBtnText: { color: "#ffffff", fontSize: 13, fontWeight: "700" },
 });

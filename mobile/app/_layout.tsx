@@ -12,6 +12,7 @@ export default function Layout() {
       <Stack.Screen name="index" />
       <Stack.Screen name="calendar" />
       <Stack.Screen name="plan" />
+      <Stack.Screen name="project" />
     </Stack>
   );
 }

@@ -1,6 +1,6 @@
 .PHONY: backend test mobile
 backend:
-	cd backend && python -m uvicorn app.main:app --reload
+	cd backend && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 test:
 	cd backend && python -m pytest
 mobile:

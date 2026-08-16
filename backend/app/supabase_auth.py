@@ -12,6 +12,15 @@ from .models import AuditLog, TeamMember, TeamWorkspace, User
 logger = logging.getLogger("supabase_auth")
 
 
+def generate_unique_team_code(db: Session) -> str:
+    """Create a stable invite code that is not used by another workspace."""
+    for _ in range(20):
+        code = f"CASPIAN-{secrets.token_hex(3).upper()}"
+        if not db.scalar(select(TeamWorkspace.id).where(TeamWorkspace.team_code == code)):
+            return code
+    raise RuntimeError("Could not generate a unique team code. Please retry.")
+
+
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
@@ -64,22 +73,23 @@ async def admin_signup_supabase(
     db.add(user)
     db.flush()
 
-    member = TeamMember(
-        user_id=user.id,
-        role="Admin / Workspace Owner",
-        approved=True,
-        active=True,
-    )
-    db.add(member)
-
-    # Generate unique team code (e.g. CASPIAN-XXXX)
-    team_code = f"CASPIAN-{secrets.token_hex(2).upper()}"
+    # Generate once per workspace; regular admin logins keep the same invite code.
+    team_code = generate_unique_team_code(db)
     workspace = TeamWorkspace(
         name=workspace_name,
         team_code=team_code,
         admin_id=user.id
     )
     db.add(workspace)
+    db.flush()
+    member = TeamMember(
+        user_id=user.id,
+        role="Admin / Workspace Owner",
+        approved=True,
+        active=True,
+        team_id=workspace.id,
+    )
+    db.add(member)
     db.add(AuditLog(action="admin_signup", entity_type="user", entity_id=user.id, detail=f"Team Code: {team_code}"))
     db.commit()
 

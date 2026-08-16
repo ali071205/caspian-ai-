@@ -11,22 +11,31 @@ from .ai_router import AIRoutingDecision, route_with_gemini
 
 WEEKDAYS = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6}
 CREATE_PATTERNS = (
-    re.compile(r"^(?P<owner>[A-Za-z][\w-]*),?\s+(?P<deadline>monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+tak\s+(?P<task>.+?)(?:\s+kar\s+dena|\s+complete\s+chahiye)?[.!?]*$", re.I),
-    re.compile(r"^(?P<owner>[A-Za-z][\w-]*),?\s+(?P<task>.+?)\s+(?:by|due)\s+(?P<deadline>monday|tuesday|wednesday|thursday|friday|saturday|sunday)[.!?]*$", re.I),
-    re.compile(r"^(?P<owner>[A-Za-z][\w-]*),?\s+(?P<task>.+?)\s+(?:by\s+)?(?:tonight|aaj\s+raat\s+tak)[.!?]*$", re.I),
+    re.compile(r"^(?P<owner>[A-Za-z][\w-]*),?\s+(?P<deadline>monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+tak\s+(?P<task>.+?)(?:\s+kar\s+dena|\s+complete\s+chahiye|\s+karna\s+hai)?[.!?]*$", re.I),
+    re.compile(r"^(?P<owner>[A-Za-z][\w-]*),\s*(?:please\s+|tumhe\s+)?(?P<task>.+?)\s+(?:by|due|tak)\s+(?P<deadline>monday|tuesday|wednesday|thursday|friday|saturday|sunday|tonight|tomorrow|aaj\s+raat)[.!?]*$", re.I),
+    re.compile(r"^(?P<owner>[A-Za-z][\w-]*)\s+(?:tumhe\s+(?:ye\s+)?karna\s+hai|you\s+need\s+to|please)\s*:?\s*(?P<task>.+?)(?:\s+(?:by|due|tak)\s+(?P<deadline>monday|tuesday|wednesday|thursday|friday|saturday|sunday|tonight|tomorrow|aaj\s+raat))?[.!?]*$", re.I),
+    re.compile(r"^(?P<owner>[A-Za-z][\w-]*)\s+(?P<task>.+?)\s+(?:by|due)\s+(?P<deadline>monday|tuesday|wednesday|thursday|friday|saturday|sunday|tonight|tomorrow|aaj\s+raat)[.!?]*$", re.I),
+    re.compile(r"^(?:assign\s+to\s+|tell\s+)(?P<owner>[A-Za-z][\w-]*)\s*(?:to|:)\s*(?P<task>.+?)(?:\s+(?:by|due|tak)\s+(?P<deadline>monday|tuesday|wednesday|thursday|friday|saturday|sunday|tonight|tomorrow))?[.!?]*$", re.I),
 )
 
 
-def next_weekday(name: str, now: datetime | None = None) -> datetime:
+def next_weekday(name: str | None, now: datetime | None = None) -> datetime:
     now = now or datetime.now()
-    days = (WEEKDAYS[name.lower()] - now.weekday()) % 7
+    if not name:
+        return datetime.combine((now + timedelta(days=1)).date(), time(18, 0))
+    lower = name.lower()
+    if lower in {"tonight", "aaj raat"}:
+        return tonight(now)
+    if lower in {"tomorrow", "kal"}:
+        return datetime.combine((now + timedelta(days=1)).date(), time(18, 0))
+    days = (WEEKDAYS.get(lower, 1) - now.weekday()) % 7
     if days == 0:
         days = 7
     return datetime.combine((now + timedelta(days=days)).date(), time(18, 0))
 
 
 def clean_task(text: str) -> str:
-    text = re.sub(r"\s+(kar\s+dena|complete\s+chahiye)$", "", text.strip(), flags=re.I)
+    text = re.sub(r"\s+(kar\s+dena|complete\s+chahiye|karna\s+hai|karo)$", "", text.strip(), flags=re.I)
     return text[0].upper() + text[1:] if text else text
 
 
@@ -64,15 +73,18 @@ def extract_intent(message: str, sender_name: str | None = None, now: datetime |
     for pattern in CREATE_PATTERNS:
         match = pattern.match(normalized)
         if match:
-            deadline_name = match.groupdict().get("deadline")
-            return {
-                "intent": "CREATE_TASK",
-                "owner": match.group("owner").title(),
-                "task": clean_task(match.group("task")),
-                "deadline": next_weekday(deadline_name, now) if deadline_name else tonight(now),
-                "status": TaskStatus.PENDING_ACK.value,
-                "confidence": 0.95,
-            }
+            owner_candidate = match.groupdict().get("owner")
+            task_candidate = match.groupdict().get("task")
+            if owner_candidate and task_candidate and len(task_candidate.strip()) > 2:
+                deadline_name = match.groupdict().get("deadline")
+                return {
+                    "intent": "CREATE_TASK",
+                    "owner": owner_candidate.title(),
+                    "task": clean_task(task_candidate),
+                    "deadline": next_weekday(deadline_name, now),
+                    "status": TaskStatus.PENDING_ACK.value,
+                    "confidence": 0.95,
+                }
     return {"intent": "UNKNOWN", "confidence": 0.0, "sender": sender_name}
 
 

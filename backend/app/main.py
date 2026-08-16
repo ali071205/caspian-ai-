@@ -10,8 +10,8 @@ from .database import Base, engine, get_db
 from .models import AuditLog, Connection, Dependency, Event, Notification, Task, TaskStatus, TaskStatusHistory, TeamMember, TeamWorkspace, User
 from .queue_worker import async_queue
 from .schemas import (
-    AdminLoginRequest, AdminSendOtpRequest, AdminSignupRequest, AdminVerifyOtpRequest,
-    ChatMessage, ConnectionOut, DependencyCreate, EventCreate,
+    AdminLoginRequest, AdminMemberCreate, AdminSendOtpRequest, AdminSignupRequest, AdminVerifyOtpRequest,
+    ChatMessage, ConnectionOut, DependencyCreate, DirectMessageCreate, EventCreate,
     MemberApprovalAction, MemberCreate, MemberJoinRequest, MemberLoginRequest, MemberOut,
     TaskCreate, TaskOut, TaskUpdate, TeamCodeVerify,
 )
@@ -122,29 +122,38 @@ async def admin_verify_otp(payload: AdminVerifyOtpRequest, db: Session = Depends
 @app.post("/auth/member/login")
 def member_login(payload: MemberLoginRequest, db: Session = Depends(get_db)):
     name_clean = payload.name.strip()
-    user = db.scalar(select(User).where(User.name.ilike(name_clean)))
+    code_clean = (payload.team_code or "").strip()
+    if not code_clean:
+        raise HTTPException(400, "Team code is required to log in as a team member.")
+    workspace = db.scalar(select(TeamWorkspace).where(TeamWorkspace.team_code.ilike(code_clean)))
+    if not workspace:
+        raise HTTPException(404, "Invalid team code.")
+
+    user = db.scalar(
+        select(User)
+        .join(TeamMember, TeamMember.user_id == User.id)
+        .where(User.name.ilike(name_clean), TeamMember.team_id == workspace.id)
+    )
     if not user:
-        # Fallback search by first name
-        user = db.scalar(select(User).where(User.name.ilike(f"{name_clean}%")))
+        user = db.scalar(
+            select(User)
+            .join(TeamMember, TeamMember.user_id == User.id)
+            .where(User.name.ilike(f"{name_clean}%"), TeamMember.team_id == workspace.id)
+        )
     if not user:
         raise HTTPException(401, "Unknown team member. Join using your Team Code first.")
 
     member = db.scalar(select(TeamMember).where(TeamMember.user_id == user.id))
-    if not member or not member.approved:
+    if not member or not member.approved or not member.active:
         raise HTTPException(403, "Membership pending admin approval. Contact your team admin.")
-
-    # Fetch workspace team code
-    workspace = db.scalar(select(TeamWorkspace).where(TeamWorkspace.id == member.team_id)) if member.team_id else db.scalar(select(TeamWorkspace))
-    team_code = workspace.team_code if workspace else "CASPIAN-2026"
-    team_name = workspace.name if workspace else "Caspian Sentinel Team"
 
     return {
         "user_id": user.id,
         "name": user.name,
         "email": user.email,
         "role": member.role,
-        "team_code": team_code,
-        "team_name": team_name,
+        "team_code": workspace.team_code,
+        "team_name": workspace.name,
         "token": f"member-token-{user.id}",
     }
 
@@ -175,10 +184,10 @@ async def submit_join_request(payload: MemberJoinRequest, db: Session = Depends(
     workspace = db.scalar(select(TeamWorkspace).where(TeamWorkspace.team_code.ilike(payload.team_code.strip())))
     if not workspace:
         raise HTTPException(404, "Invalid team code")
-    if db.scalar(select(User).where(User.name.ilike(payload.name.strip()))):
-        raise HTTPException(409, "A member with this name already exists")
+    if db.scalar(select(User).where(User.email == payload.email.strip().lower())):
+        raise HTTPException(409, "An account with this email already exists")
 
-    user = User(name=payload.name.strip(), email=payload.email.strip())
+    user = User(name=payload.name.strip(), email=payload.email.strip().lower())
     db.add(user); db.flush()
     member = TeamMember(
         user_id=user.id,
@@ -192,12 +201,12 @@ async def submit_join_request(payload: MemberJoinRequest, db: Session = Depends(
     db.add(member)
     db.add(AuditLog(action="join_request", entity_type="member", entity_id=user.id, detail=f"Role: {member.role}"))
 
-    # Notify leads
-    for lead in leads_for_alert(db):
+    # Notify only the admin who owns this workspace.
+    if workspace.admin_id:
         db.add(Notification(
-            user_id=lead.id,
+            user_id=workspace.admin_id,
             title="New Member Join Request",
-            body=f"{user.name} ({member.role}) requested to join the team. Click to approve.",
+            body=f"{user.name} ({member.role}) requested to join {workspace.name}. Click to approve.",
             severity="normal",
             channel="app",
         ))
@@ -212,7 +221,7 @@ async def submit_join_request(payload: MemberJoinRequest, db: Session = Depends(
         "skills_description": member.skills_description,
         "status": "pending_approval",
     }
-    await ws_manager.broadcast("member_join_requested", join_data)
+    await ws_manager.broadcast("member_join_requested", {**join_data, "team_id": workspace.id})
     return {
         "status": "pending_approval",
         "message": f"Join request for {user.name} submitted successfully. Awaiting admin approval.",
@@ -221,11 +230,14 @@ async def submit_join_request(payload: MemberJoinRequest, db: Session = Depends(
 
 
 @app.get("/members/pending", response_model=list[MemberOut])
-def list_pending_members(db: Session = Depends(get_db)):
+def list_pending_members(team_code: str, db: Session = Depends(get_db)):
+    workspace = db.scalar(select(TeamWorkspace).where(TeamWorkspace.team_code.ilike(team_code.strip())))
+    if not workspace:
+        raise HTTPException(404, "Invalid team code")
     rows = db.execute(
         select(User, TeamMember)
         .join(TeamMember, TeamMember.user_id == User.id)
-        .where(TeamMember.approved.is_(False))
+        .where(TeamMember.approved.is_(False), TeamMember.team_id == workspace.id)
     ).all()
     return [
         MemberOut(
@@ -244,10 +256,13 @@ def list_pending_members(db: Session = Depends(get_db)):
 
 @app.patch("/members/{user_id}/approve", response_model=MemberOut)
 async def approve_member(user_id: int, payload: MemberApprovalAction | None = None, db: Session = Depends(get_db)):
+    if payload is None:
+        raise HTTPException(400, "Team code is required")
+    workspace = db.scalar(select(TeamWorkspace).where(TeamWorkspace.team_code.ilike(payload.team_code.strip())))
     user = db.get(User, user_id)
     member = db.scalar(select(TeamMember).where(TeamMember.user_id == user_id))
-    if not user or not member:
-        raise HTTPException(404, "Member not found")
+    if not workspace or not user or not member or member.team_id != workspace.id:
+        raise HTTPException(404, "Member not found in this workspace")
 
     member.approved = True
     member.active = True
@@ -276,10 +291,11 @@ async def approve_member(user_id: int, payload: MemberApprovalAction | None = No
 
 
 @app.delete("/members/{user_id}/reject", status_code=204)
-async def reject_member(user_id: int, db: Session = Depends(get_db)):
+async def reject_member(user_id: int, team_code: str, db: Session = Depends(get_db)):
+    workspace = db.scalar(select(TeamWorkspace).where(TeamWorkspace.team_code.ilike(team_code.strip())))
     user = db.get(User, user_id)
     member = db.scalar(select(TeamMember).where(TeamMember.user_id == user_id))
-    if not user or not member:
+    if not workspace or not user or not member or member.team_id != workspace.id:
         raise HTTPException(404, "Member not found")
     db.delete(member)
     db.delete(user)
@@ -315,6 +331,7 @@ def create_member(payload: MemberCreate, db: Session = Depends(get_db)):
         raise HTTPException(409, "Member already exists")
     user = User(name=payload.name, email=payload.email)
     db.add(user); db.flush()
+    workspace = db.scalar(select(TeamWorkspace))
     member = TeamMember(
         user_id=user.id,
         role=payload.role,
@@ -322,6 +339,7 @@ def create_member(payload: MemberCreate, db: Session = Depends(get_db)):
         skills_description=payload.skills_description,
         approved=True,
         active=True,
+        team_id=workspace.id if workspace else None,
     )
     db.add(member)
     db.add(AuditLog(action="create", entity_type="member", entity_id=user.id))
@@ -329,12 +347,90 @@ def create_member(payload: MemberCreate, db: Session = Depends(get_db)):
     return MemberOut(id=user.id, **payload.model_dump(), approved=True, active=True)
 
 
+@app.post("/team/members", response_model=MemberOut, status_code=201)
+async def admin_add_member(payload: AdminMemberCreate, db: Session = Depends(get_db)):
+    workspace = db.scalar(select(TeamWorkspace).where(TeamWorkspace.team_code.ilike(payload.team_code.strip())))
+    if not workspace:
+        raise HTTPException(404, "Workspace not found")
+    email = payload.email.strip().lower() if payload.email else None
+    existing_user = db.scalar(select(User).where(User.name.ilike(payload.name.strip())))
+    if not existing_user and email:
+        existing_user = db.scalar(select(User).where(User.email == email))
+    if existing_user:
+        existing_member = db.scalar(select(TeamMember).where(TeamMember.user_id == existing_user.id))
+        if existing_member and existing_member.team_id == workspace.id and not existing_member.active:
+            existing_user.name = payload.name.strip()
+            existing_user.email = email
+            existing_member.role = payload.role.strip()
+            existing_member.contact = payload.contact.strip() if payload.contact else None
+            existing_member.skills_description = payload.skills_description.strip() if payload.skills_description else None
+            existing_member.approved = True
+            existing_member.active = True
+            db.add(AuditLog(action="admin_restore_member", entity_type="member", entity_id=existing_user.id, detail=f"Workspace {workspace.id}"))
+            db.commit()
+            result = MemberOut(
+                id=existing_user.id, name=existing_user.name, email=existing_user.email,
+                role=existing_member.role, contact=existing_member.contact,
+                skills_description=existing_member.skills_description, approved=True, active=True,
+            )
+            await ws_manager.broadcast("member_added", {**result.model_dump(), "team_id": workspace.id})
+            return result
+        raise HTTPException(409, "A member with this name or email already exists")
+    user = User(name=payload.name.strip(), email=email)
+    db.add(user); db.flush()
+    member = TeamMember(
+        user_id=user.id,
+        role=payload.role.strip(),
+        contact=payload.contact.strip() if payload.contact else None,
+        skills_description=payload.skills_description.strip() if payload.skills_description else None,
+        approved=True,
+        active=True,
+        team_id=workspace.id,
+    )
+    db.add(member)
+    db.add(AuditLog(action="admin_add_member", entity_type="member", entity_id=user.id, detail=f"Workspace {workspace.id}"))
+    db.commit()
+    result = MemberOut(
+        id=user.id, name=user.name, email=user.email, role=member.role,
+        contact=member.contact, skills_description=member.skills_description,
+        approved=True, active=True,
+    )
+    await ws_manager.broadcast("member_added", {**result.model_dump(), "team_id": workspace.id})
+    return result
+
+
+@app.delete("/team/members/{user_id}", status_code=204)
+async def admin_remove_member(user_id: int, team_code: str, db: Session = Depends(get_db)):
+    workspace = db.scalar(select(TeamWorkspace).where(TeamWorkspace.team_code.ilike(team_code.strip())))
+    user = db.get(User, user_id)
+    member = db.scalar(select(TeamMember).where(TeamMember.user_id == user_id))
+    if not workspace or not user or not member or member.team_id != workspace.id:
+        raise HTTPException(404, "Member not found in this workspace")
+    if workspace.admin_id == user_id or "admin" in (member.role or "").casefold():
+        raise HTTPException(400, "The workspace owner cannot be removed")
+    # Keep completed work and audit history while revoking workspace access.
+    member.active = False
+    db.add(AuditLog(action="admin_remove_member", entity_type="member", entity_id=user_id, detail=f"Workspace {workspace.id}"))
+    db.commit()
+    await ws_manager.broadcast("member_removed", {"user_id": user_id, "team_id": workspace.id})
+    return None
+
+
 @app.get("/members", response_model=list[MemberOut])
-def list_members(db: Session = Depends(get_db)):
+def list_members(team_code: str | None = None, db: Session = Depends(get_db)):
+    workspace = None
+    if team_code:
+        workspace = db.scalar(select(TeamWorkspace).where(TeamWorkspace.team_code.ilike(team_code.strip())))
+        if not workspace:
+            raise HTTPException(404, "Invalid team code")
     rows = db.execute(
         select(User, TeamMember)
         .join(TeamMember, TeamMember.user_id == User.id)
-        .where(TeamMember.active.is_(True), TeamMember.approved.is_(True))
+        .where(
+            TeamMember.active.is_(True),
+            TeamMember.approved.is_(True),
+            *( [TeamMember.team_id == workspace.id] if workspace else [] ),
+        )
     ).all()
     return [
         MemberOut(
@@ -365,8 +461,14 @@ async def create_task(payload: TaskCreate, db: Session = Depends(get_db)):
 
 
 @app.get("/tasks", response_model=list[TaskOut])
-def list_tasks(owner_id: int | None = None, db: Session = Depends(get_db)):
+def list_tasks(owner_id: int | None = None, team_code: str | None = None, db: Session = Depends(get_db)):
     query = select(Task).order_by(Task.deadline.asc().nullslast(), Task.id.desc())
+    if team_code:
+        workspace = db.scalar(select(TeamWorkspace).where(TeamWorkspace.team_code.ilike(team_code.strip())))
+        if not workspace:
+            raise HTTPException(404, "Invalid team code")
+        member_ids = select(TeamMember.user_id).where(TeamMember.team_id == workspace.id)
+        query = query.where(Task.owner_id.in_(member_ids))
     if owner_id is not None:
         query = query.where(Task.owner_id == owner_id)
     return list(db.scalars(query))
@@ -484,6 +586,36 @@ async def chat(payload: ChatMessage, db: Session = Depends(get_db)):
     return result
 
 
+@app.post("/messages/direct", status_code=201)
+async def send_direct_message(payload: DirectMessageCreate, db: Session = Depends(get_db)):
+    workspace = db.scalar(select(TeamWorkspace).where(TeamWorkspace.team_code.ilike(payload.team_code.strip())))
+    sender_member = db.scalar(select(TeamMember).where(TeamMember.user_id == payload.sender_id))
+    recipient_member = db.scalar(select(TeamMember).where(TeamMember.user_id == payload.recipient_id))
+    sender = db.get(User, payload.sender_id)
+    recipient = db.get(User, payload.recipient_id)
+    if (
+        not workspace or not sender or not recipient or not sender_member or not recipient_member
+        or sender_member.team_id != workspace.id or recipient_member.team_id != workspace.id
+        or not recipient_member.active or not recipient_member.approved
+    ):
+        raise HTTPException(404, "Sender or recipient was not found in this workspace")
+    message = payload.message.strip()
+    if not message:
+        raise HTTPException(400, "Message cannot be empty")
+    notification = Notification(
+        user_id=recipient.id,
+        title=f"Message from {sender.name}",
+        body=message,
+        severity="normal",
+        channel="app",
+    )
+    db.add(notification)
+    db.add(AuditLog(action="direct_message", entity_type="user", entity_id=recipient.id, detail=f"From user {sender.id}"))
+    db.commit(); db.refresh(notification)
+    await ws_manager.broadcast("direct_message", {"recipient_id": recipient.id, "sender": sender.name})
+    return {"status": "sent", "notification_id": notification.id, "recipient": recipient.name}
+
+
 @app.post("/chat/async")
 async def chat_async(payload: ChatMessage):
     """Enqueue message for non-blocking asynchronous processing via background worker."""
@@ -517,6 +649,11 @@ async def transcribe_and_route(
             raise HTTPException(502, f"Voice transcription failed: {str(exc)}")
 
     result = summarize_and_extract_voice_directive(db, transcript, sender_name=sender_name)
+    result["audio"] = {
+        "filename": file.filename or "voice_note.wav",
+        "content_type": file.content_type or "application/octet-stream",
+        "size_bytes": len(file_bytes),
+    }
     await ws_manager.broadcast("voice_note_processed", result)
     return result
 

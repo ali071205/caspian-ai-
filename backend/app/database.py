@@ -6,16 +6,24 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 ROOT_ENV = Path(__file__).resolve().parents[2] / ".env"
-load_dotenv(ROOT_ENV, override=True)
+load_dotenv(ROOT_ENV, override=False)
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
-DATABASE_URL = getenv("DATABASE_URL", "")
-if not DATABASE_URL or DATABASE_URL.startswith("sqlite:///./teamops.db"):
-    DATABASE_URL = f"sqlite:///{BACKEND_DIR / 'teamops.db'}"
-elif DATABASE_URL.startswith("postgresql://"):
-    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
-elif not (DATABASE_URL.startswith("sqlite") or DATABASE_URL.startswith("postgresql")):
-    DATABASE_URL = f"sqlite:///{BACKEND_DIR / 'teamops.db'}"
+raw_db_url = getenv("DATABASE_URL", "")
+
+if not raw_db_url:
+    db_file = (BACKEND_DIR / "teamops.db").resolve().as_posix()
+    DATABASE_URL = f"sqlite:///{db_file}"
+elif raw_db_url.startswith("sqlite:///./"):
+    relative_db = raw_db_url.removeprefix("sqlite:///./")
+    db_file = (BACKEND_DIR / relative_db).resolve().as_posix()
+    DATABASE_URL = f"sqlite:///{db_file}"
+elif raw_db_url.startswith("sqlite:///"):
+    DATABASE_URL = raw_db_url
+elif raw_db_url.startswith("postgresql://"):
+    DATABASE_URL = raw_db_url.replace("postgresql://", "postgresql+psycopg://", 1)
+else:
+    DATABASE_URL = raw_db_url
 
 connect_args = {"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
 engine_kwargs = {"connect_args": connect_args}
@@ -41,4 +49,3 @@ def get_db():
         yield db
     finally:
         db.close()
-

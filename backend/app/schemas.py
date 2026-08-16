@@ -13,6 +13,10 @@ class MemberCreate(BaseModel):
     skills_description: str | None = None
 
 
+class AdminMemberCreate(MemberCreate):
+    team_code: str
+
+
 class MemberOut(MemberCreate):
     id: int
     approved: bool = True
@@ -61,6 +65,7 @@ class MemberLoginRequest(BaseModel):
 
 class MemberApprovalAction(BaseModel):
     approved: bool = True
+    team_code: str
 
 
 class TaskCreate(BaseModel):
@@ -101,6 +106,13 @@ class ChatMessage(BaseModel):
     message: str
     sender_name: str | None = None
     channel: str = "app"
+
+
+class DirectMessageCreate(BaseModel):
+    sender_id: int
+    recipient_id: int
+    team_code: str
+    message: str
 
 
 class ExtractedIntent(BaseModel):

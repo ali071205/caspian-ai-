@@ -93,3 +93,8 @@ def test_audio_upload_endpoint_mock(client):
         assert "transcript" in data
         assert "summary" in data
         assert "teamops_result" in data
+        assert data["audio"] == {
+            "filename": "voice_note.m4a",
+            "content_type": "audio/m4a",
+            "size_bytes": len(audio_content),
+        }

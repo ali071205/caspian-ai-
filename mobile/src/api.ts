@@ -50,6 +50,18 @@ export type UserAuth = {
   token: string;
 };
 
+export type VoiceUploadResult = {
+  transcript: string;
+  summary: string;
+  teamops_result: { reply?: string; [key: string]: unknown };
+  sender: string;
+  audio: {
+    filename: string;
+    content_type: string;
+    size_bytes: number;
+  };
+};
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${API_URL}${path}`;
   try {
@@ -135,24 +147,29 @@ export const submitJoinRequest = (payload: {
 export const getTeamCode = () =>
   request<{ team_name: string; team_code: string }>("/team/code");
 
-export const getPendingMembers = () =>
-  request<Member[]>("/members/pending");
+export const getPendingMembers = (teamCode: string) =>
+  request<Member[]>(`/members/pending?team_code=${encodeURIComponent(teamCode)}`);
 
-export const approveMember = (userId: number) =>
+export const approveMember = (userId: number, teamCode: string) =>
   request<Member>(`/members/${userId}/approve`, {
     method: "PATCH",
-    body: JSON.stringify({ approved: true }),
+    body: JSON.stringify({ approved: true, team_code: teamCode }),
   });
 
-export const rejectMember = (userId: number) =>
-  request<void>(`/members/${userId}/reject`, {
+export const rejectMember = (userId: number, teamCode: string) =>
+  request<void>(`/members/${userId}/reject?team_code=${encodeURIComponent(teamCode)}`, {
     method: "DELETE",
   });
 
 // ==================== TASKS & MEMBERS ====================
 
-export const getTasks = (ownerId?: number) =>
-  request<Task[]>(`/tasks${ownerId ? `?owner_id=${ownerId}` : ""}`);
+export const getTasks = (ownerId?: number, teamCode?: string) => {
+  const params = new URLSearchParams();
+  if (ownerId) params.set("owner_id", String(ownerId));
+  if (teamCode) params.set("team_code", teamCode);
+  const query = params.toString();
+  return request<Task[]>(`/tasks${query ? `?${query}` : ""}`);
+};
 
 export const createTask = (payload: {
   title: string;
@@ -170,8 +187,23 @@ export const setTaskStatus = (id: number, status: TaskStatus) =>
     body: JSON.stringify({ status }),
   });
 
-export const getMembers = () =>
-  request<Member[]>("/members");
+export const getMembers = (teamCode?: string) =>
+  request<Member[]>(`/members${teamCode ? `?team_code=${encodeURIComponent(teamCode)}` : ""}`);
+
+export const adminAddMember = (payload: {
+  team_code: string;
+  name: string;
+  role: string;
+  email?: string;
+}) => request<Member>("/team/members", {
+  method: "POST",
+  body: JSON.stringify(payload),
+});
+
+export const adminRemoveMember = (userId: number, teamCode: string) =>
+  request<void>(`/team/members/${userId}?team_code=${encodeURIComponent(teamCode)}`, {
+    method: "DELETE",
+  });
 
 export const getTeamStatus = () =>
   request<TeamStatus>("/team/status");
@@ -184,6 +216,33 @@ export const sendChat = (message: string, senderName: string = "Admin") =>
     method: "POST",
     body: JSON.stringify({ message, sender_name: senderName, channel: "app" }),
   });
+
+export const sendDirectMessage = (payload: {
+  sender_id: number;
+  recipient_id: number;
+  team_code: string;
+  message: string;
+}) => request<{ status: string; notification_id: number; recipient: string }>("/messages/direct", {
+  method: "POST",
+  body: JSON.stringify(payload),
+});
+
+export const uploadVoiceNote = async (uri: string, senderName: string) => {
+  const filename = uri.split("/").pop() || "voice-note.m4a";
+  const extension = filename.split(".").pop()?.toLowerCase();
+  const contentType = extension === "webm" ? "audio/webm" : extension === "wav" ? "audio/wav" : "audio/mp4";
+  const form = new FormData();
+  form.append("sender_name", senderName);
+  form.append("file", { uri, name: filename, type: contentType } as any);
+
+  const response = await fetch(`${API_URL}/audio/transcribe-and-route`, {
+    method: "POST",
+    body: form,
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(data?.detail || `Voice upload failed (${response.status})`);
+  return data as VoiceUploadResult;
+};
 
 export const getNotifications = (userId?: number) =>
   request<any[]>(`/notifications${userId ? `?user_id=${userId}` : ""}`);
