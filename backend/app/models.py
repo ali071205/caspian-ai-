@@ -25,12 +25,25 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class TeamWorkspace(Base):
+    __tablename__ = "team_workspaces"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), default="Caspian Sentinel Team")
+    team_code: Mapped[str] = mapped_column(String(40), unique=True, index=True, default="CASPIAN-2026")
+    admin_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class TeamMember(Base):
     __tablename__ = "team_members"
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), unique=True)
     role: Mapped[str] = mapped_column(String(120))
+    contact: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    skills_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    approved: Mapped[bool] = mapped_column(Boolean, default=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    team_id: Mapped[int | None] = mapped_column(ForeignKey("team_workspaces.id"), nullable=True)
 
 
 class Task(Base):

@@ -109,7 +109,7 @@ def leads_for_alert(db: Session) -> list[User]:
 
 
 def active_members(db: Session) -> list[tuple[User, TeamMember]]:
-    return list(db.execute(select(User, TeamMember).join(TeamMember, TeamMember.user_id == User.id).where(TeamMember.active.is_(True))).all())
+    return list(db.execute(select(User, TeamMember).join(TeamMember, TeamMember.user_id == User.id).where(TeamMember.active.is_(True), TeamMember.approved.is_(True))).all())
 
 
 def classify_incident(text: str) -> dict[str, str] | None:
@@ -267,7 +267,19 @@ def handle_event(db: Session, event: dict[str, Any]) -> Task | None:
 
 
 def member_by_name(db: Session, name: str) -> User | None:
-    return db.scalar(select(User).where(User.name.ilike(name)))
+    clean_name = name.strip()
+    exact = db.scalar(
+        select(User)
+        .join(TeamMember, TeamMember.user_id == User.id)
+        .where(User.name.ilike(clean_name), TeamMember.approved.is_(True), TeamMember.active.is_(True))
+    )
+    if exact:
+        return exact
+    return db.scalar(
+        select(User)
+        .join(TeamMember, TeamMember.user_id == User.id)
+        .where(User.name.ilike(f"{clean_name}%"), TeamMember.approved.is_(True), TeamMember.active.is_(True))
+    )
 
 
 def active_tasks(db: Session, owner_id: int | None = None) -> list[Task]:

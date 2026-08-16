@@ -33,11 +33,16 @@ def gemini_enabled() -> bool:
 
 def routing_context(db: Session) -> dict:
     directory = [
-        {"id": user.id, "name": user.name, "role": member.role}
+        {
+            "id": user.id,
+            "name": user.name,
+            "role": member.role,
+            "skills": member.skills_description or member.role,
+        }
         for user, member in db.execute(
             select(User, TeamMember)
             .join(TeamMember, TeamMember.user_id == User.id)
-            .where(TeamMember.active.is_(True))
+            .where(TeamMember.active.is_(True), TeamMember.approved.is_(True))
         ).all()
     ]
     summaries = list(

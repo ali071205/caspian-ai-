@@ -3,7 +3,8 @@ import { ThreeScreenShowcase } from './components/ThreeScreenShowcase';
 import { HomeScreen } from './components/HomeScreen';
 import { CalendarScreen } from './components/CalendarScreen';
 import { TaskDetailScreen } from './components/TaskDetailScreen';
-import { LayoutGrid, Smartphone, Calendar as CalendarIcon, FileText, CheckCircle2 } from 'lucide-react';
+import { AuthGatewayModal } from './components/AuthGatewayModal';
+import { LayoutGrid, Smartphone, Calendar as CalendarIcon, FileText, CheckCircle2, Shield, UserCheck } from 'lucide-react';
 import './index.css';
 
 type ViewMode = 'showcase' | 'simulator' | 'home' | 'calendar' | 'detail';
@@ -12,6 +13,8 @@ type SimulatorTab = 'home' | 'calendar' | 'detail';
 export function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('showcase');
   const [simTab, setSimTab] = useState<SimulatorTab>('home');
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   const handleGoCalendar = () => {
     setViewMode('simulator');
@@ -36,10 +39,35 @@ export function App() {
           <CheckCircle2 color="#7c69ef" size={24} />
           <span>Caspian TeamOps</span>
           <span className="brand-badge">Ditto UI Preview</span>
+          {currentUser && (
+            <span style={{
+              background: 'rgba(124, 105, 239, 0.2)',
+              border: '1px solid #7c69ef',
+              borderRadius: '20px',
+              padding: '2px 10px',
+              fontSize: '11px',
+              color: '#a797ff',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}>
+              <UserCheck size={12} />
+              <span>{currentUser.name} ({currentUser.team_code || 'Admin'})</span>
+            </span>
+          )}
         </div>
 
         {/* View Switcher Controls */}
         <div className="mode-switcher">
+          <button 
+            className="mode-btn"
+            style={{ background: 'linear-gradient(135deg, #7c69ef, #5038ee)', color: '#fff' }}
+            onClick={() => setAuthModalOpen(true)}
+            title="Admin Login & Team Member Portal"
+          >
+            <Shield size={15} />
+            <span>Login / Team Portal</span>
+          </button>
           <button 
             className={`mode-btn ${viewMode === 'showcase' ? 'active' : ''}`}
             onClick={() => setViewMode('showcase')}
@@ -154,6 +182,13 @@ export function App() {
           </div>
         )}
       </main>
+
+      {/* Dual Role Auth Gateway Modal */}
+      <AuthGatewayModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        onAuthSuccess={(user) => setCurrentUser(user)}
+      />
     </div>
   );
 }

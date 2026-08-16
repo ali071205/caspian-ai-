@@ -9,11 +9,58 @@ class MemberCreate(BaseModel):
     name: str
     role: str
     email: str | None = None
+    contact: str | None = None
+    skills_description: str | None = None
 
 
 class MemberOut(MemberCreate):
     id: int
+    approved: bool = True
+    active: bool = True
     model_config = ConfigDict(from_attributes=True)
+
+
+class TeamCodeVerify(BaseModel):
+    team_code: str
+
+
+class MemberJoinRequest(BaseModel):
+    team_code: str
+    name: str
+    email: str
+    role: str
+    contact: str | None = None
+    skills_description: str | None = None
+
+
+class AdminSignupRequest(BaseModel):
+    email: str
+    password: str
+    name: str = "Admin"
+    workspace_name: str = "Caspian Sentinel Team"
+
+
+class AdminLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class AdminSendOtpRequest(BaseModel):
+    email: str
+
+
+class AdminVerifyOtpRequest(BaseModel):
+    email: str
+    token_code: str
+
+
+class MemberLoginRequest(BaseModel):
+    name: str
+    team_code: str | None = None
+
+
+class MemberApprovalAction(BaseModel):
+    approved: bool = True
 
 
 class TaskCreate(BaseModel):
