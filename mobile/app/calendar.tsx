@@ -16,8 +16,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { getTasks, setTaskStatus, createTask, getMembers, Task, Member, TaskStatus } from "../src/api";
 import { AppIcon } from "../src/components/Icons";
+import { BottomNav } from "../src/components/BottomNav";
+import { useSession } from "../src/session";
 
 export default function CalendarScreen() {
+  const { user } = useSession();
   const [selectedDay, setSelectedDay] = useState(16);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
@@ -36,7 +39,11 @@ export default function CalendarScreen() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const [t, m] = await Promise.all([getTasks(), getMembers()]);
+      const teamCode = user?.team_code || undefined;
+      const [t, m] = await Promise.all([
+        getTasks(undefined, teamCode),
+        getMembers(teamCode),
+      ]);
       setTasks(t);
       setMembers(m);
       if (m.length > 0) setNewOwnerId(m[0].id);
@@ -45,7 +52,7 @@ export default function CalendarScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -197,21 +204,8 @@ export default function CalendarScreen() {
           )}
         </ScrollView>
 
-        {/* Floating Bottom Nav */}
-        <View style={styles.bottomNav}>
-          <TouchableOpacity style={styles.navItem} onPress={() => router.push("/")}>
-            <AppIcon name="home" variant="outline" size={22} color="#9aa5b8" />
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.navItem, styles.navItemActive]}>
-            <AppIcon name="library" variant="filled" size={22} color="#7c69ef" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navItem} onPress={() => router.push("/plan")}>
-            <AppIcon name="edit" variant="outline" size={22} color="#9aa5b8" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navItem} onPress={() => router.push("/project")}>
-            <AppIcon name="categories" variant="outline" size={22} color="#9aa5b8" />
-          </TouchableOpacity>
-        </View>
+        {/* Solid Bottom Navigation Bar */}
+        <BottomNav activeTab="calendar" />
 
         {/* Create Task Modal */}
         <Modal visible={createModalVisible} transparent animationType="slide">
@@ -254,10 +248,9 @@ const styles = StyleSheet.create({
   safeContainer: {
     flex: 1,
     backgroundColor: "#ffffff",
-    paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight || 24) + 6 : 0,
   },
-  container: { flex: 1, backgroundColor: "#f7f8fc" },
-  scrollContent: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 100 },
+  container: { flex: 1, backgroundColor: "#f7f8fc", width: "100%" },
+  scrollContent: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 24 },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
   iconBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#ffffff", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#e5e5ea" },
   headerTitle: { fontSize: 16, fontWeight: "700", color: "#1c1c1e" },

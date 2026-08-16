@@ -278,20 +278,23 @@ def handle_event(db: Session, event: dict[str, Any]) -> Task | None:
     return routed_task
 
 
-def member_by_name(db: Session, name: str) -> User | None:
+from .models import ConversationSummary, Dependency, Notification, Task, TaskStatus, TaskStatusHistory, TeamMember, TeamWorkspace, User
+
+
+def member_by_name(db: Session, name: str, team_code: str | None = None) -> User | None:
     clean_name = name.strip()
-    exact = db.scalar(
+    stmt = (
         select(User)
         .join(TeamMember, TeamMember.user_id == User.id)
-        .where(User.name.ilike(clean_name), TeamMember.approved.is_(True), TeamMember.active.is_(True))
+        .where(TeamMember.approved.is_(True), TeamMember.active.is_(True))
     )
+    if team_code:
+        stmt = stmt.join(TeamWorkspace, TeamWorkspace.id == TeamMember.team_id).where(TeamWorkspace.team_code.ilike(team_code.strip()))
+    
+    exact = db.scalar(stmt.where(User.name.ilike(clean_name)))
     if exact:
         return exact
-    return db.scalar(
-        select(User)
-        .join(TeamMember, TeamMember.user_id == User.id)
-        .where(User.name.ilike(f"{clean_name}%"), TeamMember.approved.is_(True), TeamMember.active.is_(True))
-    )
+    return db.scalar(stmt.where(User.name.ilike(f"{clean_name}%")))
 
 
 def active_tasks(db: Session, owner_id: int | None = None) -> list[Task]:
@@ -344,7 +347,7 @@ def remember_summary(db: Session, channel: str, message: str, intent: dict[str, 
     db.add(ConversationSummary(channel=channel, summary=safe_summary))
 
 
-def process_message(db: Session, message: str, sender_name: str | None, channel: str) -> dict[str, Any]:
+def process_message(db: Session, message: str, sender_name: str | None, channel: str, team_code: str | None = None) -> dict[str, Any]:
     # ContextFence: detect potential secrets or credential leaks and block storing/displaying them
     if detect_secret(message):
         reply = "A potential secret or credential was detected and blocked. Contact an authorized lead for details."
@@ -361,7 +364,7 @@ def process_message(db: Session, message: str, sender_name: str | None, channel:
     kind = intent["intent"]
 
     if kind == "CREATE_TASK":
-        owner = member_by_name(db, intent["owner"])
+        owner = member_by_name(db, intent["owner"], team_code=team_code)
         if not owner:
             reply = f"I couldn't create the task: {intent['owner']} is not a team member."
         else:
@@ -371,7 +374,7 @@ def process_message(db: Session, message: str, sender_name: str | None, channel:
             db.add(Notification(user_id=owner.id, title="New commitment", body=f"{task.title} · Due {task.deadline:%A, %d %b}", severity="normal", channel="app"))
             reply = f"Task created for {owner.name}: {task.title}. Due {task.deadline:%A, %d %b at %I:%M %p}. Awaiting acknowledgement."
     elif kind in {"ACKNOWLEDGE_TASK", "UPDATE_TASK"}:
-        sender = member_by_name(db, sender_name or "")
+        sender = member_by_name(db, sender_name or "", team_code=team_code)
         task = active_tasks(db, sender.id)[0] if sender and active_tasks(db, sender.id) else None
         if not sender:
             reply = "Please identify the sender before updating a task."
@@ -385,7 +388,7 @@ def process_message(db: Session, message: str, sender_name: str | None, channel:
                 db.add(Notification(user_id=task.owner_id, title="Blocker recorded", body=f"{task.title} needs attention.", severity="critical", channel="app"))
             reply = f"{task.title} → {task.status}."
     elif kind in {"REQUEST_HELP", "REQUEST_EXTENSION"}:
-        sender = member_by_name(db, sender_name or "")
+        sender = member_by_name(db, sender_name or "", team_code=team_code)
         tasks = active_tasks(db, sender.id) if sender else []
         task = tasks[0] if tasks else None
         if not sender:
@@ -407,7 +410,7 @@ def process_message(db: Session, message: str, sender_name: str | None, channel:
         reply = blockers_reply(db)
     elif kind == "REPORT_DELAY":
         # Sender reports a delay for a named component/task
-        sender = member_by_name(db, sender_name or "")
+        sender = member_by_name(db, sender_name or "", team_code=team_code)
         # try to find a matching active task by title containing the reported task fragment
         task = None
         if sender:
@@ -436,7 +439,19 @@ def process_message(db: Session, message: str, sender_name: str | None, channel:
                 db.add(Notification(user_id=lead.id, title="Dependency risk", body=f"{task.title} delayed -> {len(affected)} downstream tasks at risk.", severity="normal", channel="app"))
             reply = f"{task.title} → {task.status}. Downstream tasks: {len(affected)} marked AT RISK."
     else:
-        ai_decision = route_with_gemini(db, message, channel)
+        incident = classify_incident(message)
+        task = create_routed_incident(db, incident, channel) if incident else None
+        if task:
+            owner = db.get(User, task.owner_id)
+            reply = f"{incident['title']} detected and assigned to {owner.name if owner else 'the response team'} for acknowledgement."
+            intent = {"intent": "ROUTE_INCIDENT", "category": incident["kind"], "owner": owner.name if owner else None}
+            remember_summary(db, channel, message, intent, reply)
+            db.commit()
+            return {"reply": reply, "intent": intent}
+        try:
+            ai_decision = route_with_gemini(db, message, channel, team_code=team_code) if team_code else route_with_gemini(db, message, channel)
+        except TypeError:
+            ai_decision = route_with_gemini(db, message, channel)
         ai_task = create_ai_routed_task(db, ai_decision, channel) if ai_decision else None
         if ai_task:
             owner = db.get(User, ai_task.owner_id)
@@ -445,12 +460,6 @@ def process_message(db: Session, message: str, sender_name: str | None, channel:
             remember_summary(db, channel, message, intent, reply)
             db.commit()
             return {"reply": reply, "intent": intent}
-        incident = classify_incident(message)
-        task = create_routed_incident(db, incident, channel) if incident else None
-        if task:
-            owner = db.get(User, task.owner_id)
-            reply = f"{incident['title']} detected and assigned to {owner.name if owner else 'the response team'} for acknowledgement."
-            intent = {"intent": "ROUTE_INCIDENT", "category": incident["kind"], "owner": owner.name if owner else None}
         else:
             reply = "I couldn't safely understand that. Try assigning a task with an owner and weekday, or ask for team status."
 

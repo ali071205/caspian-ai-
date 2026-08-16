@@ -5,7 +5,7 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-from .database import Base, SessionLocal, engine
+from .database import SessionLocal, init_db
 from .teamops import process_message
 
 
@@ -50,8 +50,37 @@ def handle_caspian_message(message: Any) -> dict[str, Any]:
         channel = str(getattr(message, "channel", "email") or "email")
         with SessionLocal() as db:
             result = process_message(db, text, sender_name(getattr(message, "sender", None)), channel)
-    message.reply(result["reply"])
+
+    # Build rich blocks for Slack / Discord / Email rendering
+    try:
+        from caspian_sdk import blocks as b
+        reply_text = result.get("reply", "Directive processed.")
+        blocks = [
+            b.card(
+                title="🛡️ Caspian TeamOps Sentinel",
+                subtitle="Operational Action Processed",
+                text=reply_text,
+                buttons=[
+                    {"label": "✓ Acknowledge", "value": "accept"},
+                    {"label": "⚠️ Report Blocker", "value": "blocked"},
+                ],
+            )
+        ]
+        message.reply(text=reply_text, blocks=blocks)
+    except Exception:
+        message.reply(result.get("reply", "Processed."))
     return result
+
+
+def handle_caspian_interaction(interaction: Any) -> None:
+    """Handle button tap events from Slack Block Kit or Discord buttons."""
+    value = str(getattr(interaction, "value", "") or "").strip()
+    if not value:
+        interaction.reply("Button action received.")
+        return
+    with SessionLocal() as db:
+        result = process_message(db, value, sender_name="Interactive User", channel="slack")
+    interaction.reply(result.get("reply", f"Action {value} completed."))
 
 
 def run_listener() -> None:
@@ -60,8 +89,10 @@ def run_listener() -> None:
         raise RuntimeError("CASPIAN_API_KEY is missing. Run `caspian init` in the project root.")
     from caspian_sdk import CommClient
 
-    Base.metadata.create_all(engine)
+    init_db()
     client = CommClient()
     client.on_message(handle_caspian_message)
-    print("Caspian TeamOps listener is online. Press Ctrl+C to stop.")
+    client.on_interaction(handle_caspian_interaction)
+    print("Caspian TeamOps multi-channel listener is online. Press Ctrl+C to stop.")
     client.listen(ack="TeamOps received your message. Processing it now…")
+

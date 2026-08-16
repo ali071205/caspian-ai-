@@ -106,6 +106,7 @@ class ChatMessage(BaseModel):
     message: str
     sender_name: str | None = None
     channel: str = "app"
+    team_code: str | None = None
 
 
 class DirectMessageCreate(BaseModel):
@@ -127,3 +128,9 @@ class ExtractedIntent(BaseModel):
 class DependencyCreate(BaseModel):
     task_id: int
     depends_on_task_id: int
+
+
+class TTSRequest(BaseModel):
+    text: str
+    lang: str = "en"
+

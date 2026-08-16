@@ -1,23 +1,23 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
-  View,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  Modal,
-  StyleSheet,
-  ActivityIndicator,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
+  View,
 } from "react-native";
 import {
   adminLogin,
   adminSendOtp,
-  adminVerifyOtp,
   adminSignup,
+  adminVerifyOtp,
   memberLogin,
-  verifyTeamCode,
   submitJoinRequest,
   UserAuth,
 } from "../api";
@@ -29,372 +29,596 @@ interface AuthModalProps {
   onSuccess: (user: UserAuth) => void;
 }
 
-const DEMO_ACCOUNTS = [
-  { name: "Ali", role: "Admin", email: "ali@company.com", type: "admin" },
-  { name: "Kevin", role: "Backend Eng", email: "kevin@company.com", type: "member" },
-  { name: "Antony Jacob", role: "Product Lead", email: "antony@company.com", type: "member" },
-  { name: "Leslie Alexander", role: "UI Designer", email: "leslie@company.com", type: "member" },
-  { name: "Wade Warren", role: "QA Researcher", email: "wade@company.com", type: "member" },
-];
-
 export const AuthModal: React.FC<AuthModalProps> = ({ visible, onClose, onSuccess }) => {
-  const [activeTab, setActiveTab] = useState<"admin" | "member">("admin");
+  const [portalType, setPortalType] = useState<"admin" | "member">("admin");
+
+  // Admin State
   const [adminMode, setAdminMode] = useState<"login" | "otp" | "signup">("login");
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [adminName, setAdminName] = useState("Ali");
-  const [workspaceName, setWorkspaceName] = useState("Caspian Sentinel Team");
+  const [adminName, setAdminName] = useState("");
+  const [workspaceName, setWorkspaceName] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [otpSent, setOtpSent] = useState(false);
 
-  const [memberMode, setMemberMode] = useState<"login" | "join">("login");
-  const [memberName, setMemberName] = useState("");
+  // Member State
+  const [memberMode, setMemberMode] = useState<"join" | "login">("join");
   const [teamCode, setTeamCode] = useState("CASPIAN-2026");
-  const [teamVerified, setTeamVerified] = useState(false);
+  const [memberName, setMemberName] = useState("");
   const [memberEmail, setMemberEmail] = useState("");
   const [memberRole, setMemberRole] = useState("");
+  const [memberContact, setMemberContact] = useState("");
+  const [memberSkills, setMemberSkills] = useState("");
 
   const [waitingForApproval, setWaitingForApproval] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
-  const reset = () => { setErrorMsg(""); setSuccessMsg(""); };
+  const clearMessages = () => {
+    setErrorMsg("");
+    setSuccessMsg("");
+  };
 
+  // Poll for approval if waiting
   useEffect(() => {
     let interval: any = null;
     if (waitingForApproval && memberName.trim() && visible) {
       interval = setInterval(async () => {
         try {
-          const user = await memberLogin(memberName.trim());
+          const user = await memberLogin(memberName.trim(), teamCode.trim());
           if (user && user.user_id) {
             clearInterval(interval);
             setWaitingForApproval(false);
-            setSuccessMsg(`🎉 Approved! Welcome ${user.name}!`);
-            setTimeout(() => { onSuccess(user); onClose(); }, 800);
+            setSuccessMsg(`🎉 Approved! Welcome to ${user.team_name}, ${user.name}!`);
+            setTimeout(() => {
+              onSuccess(user);
+              onClose();
+            }, 900);
           }
-        } catch {}
+        } catch {
+          // still pending
+        }
       }, 2000);
     }
-    return () => { if (interval) clearInterval(interval); };
-  }, [waitingForApproval, memberName, visible, onSuccess, onClose]);
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [waitingForApproval, memberName, teamCode, visible, onSuccess, onClose]);
 
-  const handleQuickDemo = async (acc: typeof DEMO_ACCOUNTS[0]) => {
-    setLoading(true);
-    reset();
-    try {
-      const user = acc.type === "admin"
-        ? await adminLogin({ email: acc.email, password: "admin123" })
-        : await memberLogin(acc.name);
-      setSuccessMsg(`Welcome ${user.name}!`);
-      setTimeout(() => { onSuccess(user); onClose(); }, 400);
-    } catch (err: any) {
-      setErrorMsg(err.message || "Demo login failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Admin Login
   const handleAdminLogin = async () => {
+    if (!adminEmail.trim() || !adminPassword.trim()) {
+      setErrorMsg("Please enter both email and password.");
+      return;
+    }
     setLoading(true);
-    reset();
+    clearMessages();
     try {
       const user = await adminLogin({
-        email: adminEmail.trim() || "ali@company.com",
-        password: adminPassword || "admin123",
+        email: adminEmail.trim(),
+        password: adminPassword.trim(),
       });
-      setSuccessMsg(`Welcome Admin ${user.name}!`);
-      setTimeout(() => { onSuccess(user); onClose(); }, 400);
+      setSuccessMsg(`Welcome back, ${user.name}!`);
+      setTimeout(() => {
+        onSuccess(user);
+        onClose();
+      }, 500);
     } catch (err: any) {
-      setErrorMsg(err.message || "Login failed");
+      setErrorMsg(err.message || "Admin login failed.");
     } finally {
       setLoading(false);
     }
   };
 
+  // Admin Send OTP
   const handleSendOtp = async () => {
-    if (!adminEmail.trim()) return setErrorMsg("Enter email");
+    if (!adminEmail.trim()) {
+      setErrorMsg("Please enter your admin email.");
+      return;
+    }
     setLoading(true);
-    reset();
+    clearMessages();
     try {
       await adminSendOtp(adminEmail.trim());
       setOtpSent(true);
-      setSuccessMsg("OTP code sent to email!");
+      setSuccessMsg("6-digit verification code sent to your email.");
     } catch (err: any) {
-      setErrorMsg(err.message || "Failed to send OTP");
+      setErrorMsg(err.message || "Failed to send verification code.");
     } finally {
       setLoading(false);
     }
   };
 
+  // Admin Verify OTP
   const handleVerifyOtp = async () => {
-    if (!otpCode.trim()) return setErrorMsg("Enter 6-digit OTP");
+    if (!otpCode.trim()) {
+      setErrorMsg("Please enter the 6-digit code.");
+      return;
+    }
     setLoading(true);
-    reset();
+    clearMessages();
     try {
-      const user = await adminVerifyOtp({ email: adminEmail.trim(), token_code: otpCode.trim() });
-      setSuccessMsg(`Verified! Welcome ${user.name}`);
-      setTimeout(() => { onSuccess(user); onClose(); }, 400);
+      const user = await adminVerifyOtp({
+        email: adminEmail.trim(),
+        token_code: otpCode.trim(),
+      });
+      setSuccessMsg(`Verified! Welcome ${user.name}.`);
+      setTimeout(() => {
+        onSuccess(user);
+        onClose();
+      }, 500);
     } catch (err: any) {
-      setErrorMsg(err.message || "Invalid OTP");
+      setErrorMsg(err.message || "Invalid or expired code.");
     } finally {
       setLoading(false);
     }
   };
 
+  // Admin Signup
   const handleAdminSignup = async () => {
-    if (!adminEmail.trim() || !adminPassword.trim()) return setErrorMsg("Fill Email & Password");
+    if (!adminEmail.trim() || !adminPassword.trim() || !adminName.trim()) {
+      setErrorMsg("Please fill in all required fields.");
+      return;
+    }
     setLoading(true);
-    reset();
+    clearMessages();
     try {
       const user = await adminSignup({
         email: adminEmail.trim(),
-        password: adminPassword,
-        name: adminName.trim() || "Ali",
-        workspace_name: workspaceName.trim() || "Caspian Team",
+        password: adminPassword.trim(),
+        name: adminName.trim(),
+        workspace_name: workspaceName.trim() || undefined,
       });
-      setSuccessMsg(`Workspace created! Code: ${user.team_code}`);
-      setTimeout(() => { onSuccess(user); onClose(); }, 600);
+      setSuccessMsg(`Workspace created! Welcome ${user.name}.`);
+      setTimeout(() => {
+        onSuccess(user);
+        onClose();
+      }, 600);
     } catch (err: any) {
-      setErrorMsg(err.message || "Signup failed");
+      setErrorMsg(err.message || "Failed to create workspace.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleMemberLogin = async () => {
-    if (!memberName.trim()) return setErrorMsg("Enter member name");
-    setLoading(true);
-    reset();
-    try {
-      const user = await memberLogin(memberName.trim());
-      setSuccessMsg(`Welcome ${user.name}!`);
-      setTimeout(() => { onSuccess(user); onClose(); }, 400);
-    } catch (err: any) {
-      setErrorMsg(err.message || "Sign-in failed. Ensure name is approved.");
-    } finally {
-      setLoading(false);
+  // Member Submit Join Request
+  const handleMemberJoin = async () => {
+    if (!teamCode.trim() || !memberName.trim() || !memberEmail.trim() || !memberRole.trim()) {
+      setErrorMsg("Please fill in Team Code, Full Name, Email, and Role.");
+      return;
     }
-  };
-
-  const handleVerifyCode = async () => {
-    if (!teamCode.trim()) return setErrorMsg("Enter team code");
     setLoading(true);
-    reset();
-    try {
-      const res = await verifyTeamCode(teamCode.trim().toUpperCase());
-      setTeamVerified(true);
-      setSuccessMsg(`Verified for ${res.team_name}`);
-    } catch (err: any) {
-      setErrorMsg(err.message || "Invalid team code");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleJoinSubmit = async () => {
-    if (!memberName.trim() || !memberEmail.trim() || !memberRole.trim()) return setErrorMsg("Fill Name, Email, and Role");
-    setLoading(true);
-    reset();
+    clearMessages();
     try {
       await submitJoinRequest({
-        team_code: teamCode.trim().toUpperCase(),
+        team_code: teamCode.trim(),
         name: memberName.trim(),
         email: memberEmail.trim(),
         role: memberRole.trim(),
+        contact: memberContact.trim() || undefined,
+        skills_description: memberSkills.trim() || undefined,
       });
       setWaitingForApproval(true);
-      setSuccessMsg("Request submitted! Awaiting Admin approval.");
+      setSuccessMsg("Join request submitted! Waiting for workspace admin approval...");
     } catch (err: any) {
-      setErrorMsg(err.message || "Failed to submit");
+      setErrorMsg(err.message || "Failed to submit join request.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Member Login (for approved members)
+  const handleMemberLogin = async () => {
+    if (!memberName.trim()) {
+      setErrorMsg("Please enter your name or email.");
+      return;
+    }
+    setLoading(true);
+    clearMessages();
+    try {
+      const user = await memberLogin(memberName.trim(), teamCode.trim() || undefined);
+      setSuccessMsg(`Welcome ${user.name}!`);
+      setTimeout(() => {
+        onSuccess(user);
+        onClose();
+      }, 500);
+    } catch (err: any) {
+      if (err.message?.toLowerCase().includes("pending") || err.message?.toLowerCase().includes("approval")) {
+        setWaitingForApproval(true);
+        setSuccessMsg("Your request is still pending approval from the admin.");
+      } else {
+        setErrorMsg(err.message || "Member login failed. If you haven't joined yet, please use 'Join Workspace'.");
+      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade">
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.overlay}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
         <View style={styles.card}>
           {/* Header */}
           <View style={styles.header}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-              <AppIcon name="shield" variant="filled" size={16} color="#a797ff" />
-              <Text style={styles.headerBrand}>CASPIAN SENTINEL GATEWAY</Text>
+            <View>
+              <Text style={styles.title}>Caspian TeamOps</Text>
+              <Text style={styles.subtitle}>Workspace Authentication & Onboarding</Text>
             </View>
-            <TouchableOpacity onPress={onClose}><AppIcon name="close" size={16} color="#9aa5b8" /></TouchableOpacity>
+            <Pressable onPress={onClose} style={styles.closeBtn}>
+              <AppIcon name="close" size={18} color="#9aa5b8" />
+            </Pressable>
           </View>
 
-          {/* Quick 1-Tap Demo Switcher */}
-          <View style={styles.demoBar}>
-            <Text style={styles.demoBarTitle}>⚡ 1-Tap Quick Login:</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-              {DEMO_ACCOUNTS.map((acc, idx) => (
-                <TouchableOpacity
-                  key={idx}
-                  style={[styles.demoChip, acc.type === "admin" && styles.demoChipAdmin]}
-                  onPress={() => handleQuickDemo(acc)}
-                  disabled={loading}
-                >
-                  <Text style={[styles.demoChipText, acc.type === "admin" && styles.demoChipTextAdmin]}>
-                    {acc.type === "admin" ? "👑" : "👤"} {acc.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollBody}>
+            {/* Top Portal Switcher */}
+            <View style={styles.portalTabs}>
+              <TouchableOpacity
+                style={[styles.portalTab, portalType === "admin" && styles.portalTabActive]}
+                onPress={() => {
+                  setPortalType("admin");
+                  clearMessages();
+                  setWaitingForApproval(false);
+                }}
+              >
+                <AppIcon name="shield" size={14} color={portalType === "admin" ? "#7c69ef" : "#858397"} />
+                <Text style={[styles.portalTabText, portalType === "admin" && styles.portalTabTextActive]}>
+                  Admin / Lead
+                </Text>
+              </TouchableOpacity>
 
-          {/* Tabs */}
-          <View style={styles.tabRow}>
-            <TouchableOpacity
-              style={[styles.tabBtn, activeTab === "admin" && styles.tabBtnActive]}
-              onPress={() => { setActiveTab("admin"); reset(); }}
-            >
-              <Text style={[styles.tabText, activeTab === "admin" && styles.tabTextActive]}>👑 Admin Portal</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.tabBtn, activeTab === "member" && styles.tabBtnActive]}
-              onPress={() => { setActiveTab("member"); reset(); }}
-            >
-              <Text style={[styles.tabText, activeTab === "member" && styles.tabTextActive]}>👥 Team Worker</Text>
-            </TouchableOpacity>
-          </View>
+              <TouchableOpacity
+                style={[styles.portalTab, portalType === "member" && styles.portalTabActive]}
+                onPress={() => {
+                  setPortalType("member");
+                  clearMessages();
+                }}
+              >
+                <AppIcon name="user" size={14} color={portalType === "member" ? "#7c69ef" : "#858397"} />
+                <Text style={[styles.portalTabText, portalType === "member" && styles.portalTabTextActive]}>
+                  Team Member
+                </Text>
+              </TouchableOpacity>
+            </View>
 
-          {/* Body */}
-          <ScrollView contentContainerStyle={{ padding: 16 }} showsVerticalScrollIndicator={false}>
-            {errorMsg ? <Text style={styles.errBox}>⚠️ {errorMsg}</Text> : null}
-            {successMsg ? <Text style={styles.succBox}>✓ {successMsg}</Text> : null}
+            {/* Error / Success Notifications */}
+            {errorMsg ? (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorText}>⚠️ {errorMsg}</Text>
+              </View>
+            ) : null}
 
-            {activeTab === "admin" && (
+            {successMsg ? (
+              <View style={styles.successBox}>
+                <Text style={styles.successText}>{successMsg}</Text>
+              </View>
+            ) : null}
+
+            {/* ================= ADMIN PORTAL ================= */}
+            {portalType === "admin" && (
               <View>
-                <View style={styles.subModeRow}>
-                  {[
-                    { key: "login", label: "🔑 Password" },
-                    { key: "otp", label: "✉️ OTP" },
-                    { key: "signup", label: "➕ Register" },
-                  ].map((m) => (
-                    <TouchableOpacity
-                      key={m.key}
-                      style={[styles.subModeBtn, adminMode === m.key && styles.subModeBtnActive]}
-                      onPress={() => { setAdminMode(m.key as any); reset(); }}
-                    >
-                      <Text style={[styles.subModeText, adminMode === m.key && styles.subModeTextActive]}>{m.label}</Text>
-                    </TouchableOpacity>
-                  ))}
+                {/* Admin Mode Switcher */}
+                <View style={styles.modeRow}>
+                  <TouchableOpacity
+                    style={[styles.modeBtn, adminMode === "login" && styles.modeBtnActive]}
+                    onPress={() => {
+                      setAdminMode("login");
+                      clearMessages();
+                    }}
+                  >
+                    <Text style={[styles.modeText, adminMode === "login" && styles.modeTextActive]}>Password</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.modeBtn, adminMode === "otp" && styles.modeBtnActive]}
+                    onPress={() => {
+                      setAdminMode("otp");
+                      clearMessages();
+                    }}
+                  >
+                    <Text style={[styles.modeText, adminMode === "otp" && styles.modeTextActive]}>Email OTP</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.modeBtn, adminMode === "signup" && styles.modeBtnActive]}
+                    onPress={() => {
+                      setAdminMode("signup");
+                      clearMessages();
+                    }}
+                  >
+                    <Text style={[styles.modeText, adminMode === "signup" && styles.modeTextActive]}>Create Team</Text>
+                  </TouchableOpacity>
                 </View>
 
                 {adminMode === "login" && (
-                  <View>
-                    <Text style={styles.label}>Admin Email</Text>
-                    <TextInput style={styles.input} placeholder="ali@company.com" placeholderTextColor="#64748b" value={adminEmail} onChangeText={setAdminEmail} autoCapitalize="none" />
-                    <Text style={styles.label}>Password</Text>
-                    <View style={{ flexDirection: "row", alignItems: "center" }}>
-                      <TextInput style={[styles.input, { flex: 1 }]} placeholder="••••••••" placeholderTextColor="#64748b" secureTextEntry={!showPassword} value={adminPassword} onChangeText={setAdminPassword} />
-                      <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={{ position: "absolute", right: 8, padding: 6 }}>
-                        <AppIcon name={showPassword ? "eye-off" : "eye"} size={14} color="#94a3b8" />
+                  <View style={styles.form}>
+                    <Text style={styles.label}>ADMIN EMAIL *</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="admin@company.com"
+                      value={adminEmail}
+                      onChangeText={setAdminEmail}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                    />
+
+                    <Text style={styles.label}>PASSWORD *</Text>
+                    <View style={styles.passwordRow}>
+                      <TextInput
+                        style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                        placeholder="••••••••"
+                        secureTextEntry={!showPassword}
+                        value={adminPassword}
+                        onChangeText={setAdminPassword}
+                      />
+                      <TouchableOpacity
+                        style={styles.eyeBtn}
+                        onPress={() => setShowPassword(!showPassword)}
+                      >
+                        <AppIcon name={showPassword ? "eye-off" : "eye"} size={16} color="#858397" />
                       </TouchableOpacity>
                     </View>
-                    <TouchableOpacity style={styles.btn} onPress={handleAdminLogin} disabled={loading}>
-                      {loading ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.btnText}>Sign In as Admin</Text>}
+
+                    <TouchableOpacity
+                      style={[styles.submitBtn, loading && { opacity: 0.6 }]}
+                      onPress={handleAdminLogin}
+                      disabled={loading}
+                    >
+                      {loading ? (
+                        <ActivityIndicator color="#fff" size="small" />
+                      ) : (
+                        <Text style={styles.submitBtnText}>Sign In as Admin</Text>
+                      )}
                     </TouchableOpacity>
                   </View>
                 )}
 
                 {adminMode === "otp" && (
-                  <View>
-                    <Text style={styles.label}>Admin Email</Text>
-                    <View style={{ flexDirection: "row", gap: 6 }}>
-                      <TextInput style={[styles.input, { flex: 1 }]} placeholder="ali@company.com" placeholderTextColor="#64748b" value={adminEmail} onChangeText={setAdminEmail} autoCapitalize="none" />
-                      <TouchableOpacity style={styles.inlineBtn} onPress={handleSendOtp} disabled={loading}>
-                        <Text style={{ color: "#fff", fontSize: 11, fontWeight: "700" }}>{otpSent ? "Resend" : "Send OTP"}</Text>
-                      </TouchableOpacity>
-                    </View>
+                  <View style={styles.form}>
+                    <Text style={styles.label}>ADMIN EMAIL *</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="admin@company.com"
+                      value={adminEmail}
+                      onChangeText={setAdminEmail}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      editable={!otpSent}
+                    />
+
                     {otpSent && (
-                      <View>
-                        <Text style={styles.label}>6-Digit Code</Text>
-                        <TextInput style={[styles.input, styles.otpInput]} placeholder="••••••" placeholderTextColor="#475569" keyboardType="number-pad" maxLength={6} value={otpCode} onChangeText={setOtpCode} />
-                        <TouchableOpacity style={styles.btn} onPress={handleVerifyOtp} disabled={loading}>
-                          {loading ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.btnText}>Verify & Sign In</Text>}
-                        </TouchableOpacity>
-                      </View>
+                      <>
+                        <Text style={styles.label}>6-DIGIT VERIFICATION CODE *</Text>
+                        <TextInput
+                          style={[styles.input, { letterSpacing: 4, fontSize: 18, fontWeight: "700" }]}
+                          placeholder="123456"
+                          keyboardType="number-pad"
+                          maxLength={6}
+                          value={otpCode}
+                          onChangeText={setOtpCode}
+                        />
+                      </>
                     )}
+
+                    <TouchableOpacity
+                      style={[styles.submitBtn, loading && { opacity: 0.6 }]}
+                      onPress={otpSent ? handleVerifyOtp : handleSendOtp}
+                      disabled={loading}
+                    >
+                      {loading ? (
+                        <ActivityIndicator color="#fff" size="small" />
+                      ) : (
+                        <Text style={styles.submitBtnText}>
+                          {otpSent ? "Verify Code & Sign In" : "Send 6-Digit OTP"}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
                   </View>
                 )}
 
                 {adminMode === "signup" && (
-                  <View>
-                    <Text style={styles.label}>Workspace Name</Text>
-                    <TextInput style={styles.input} placeholder="Caspian Team" placeholderTextColor="#64748b" value={workspaceName} onChangeText={setWorkspaceName} />
-                    <Text style={styles.label}>Admin Name</Text>
-                    <TextInput style={styles.input} placeholder="Ali Ahmad" placeholderTextColor="#64748b" value={adminName} onChangeText={setAdminName} />
-                    <Text style={styles.label}>Email</Text>
-                    <TextInput style={styles.input} placeholder="admin@company.com" placeholderTextColor="#64748b" value={adminEmail} onChangeText={setAdminEmail} autoCapitalize="none" />
-                    <Text style={styles.label}>Password</Text>
-                    <TextInput style={styles.input} placeholder="••••••••" placeholderTextColor="#64748b" secureTextEntry value={adminPassword} onChangeText={setAdminPassword} />
-                    <TouchableOpacity style={styles.btn} onPress={handleAdminSignup} disabled={loading}>
-                      {loading ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.btnText}>Create Workspace</Text>}
+                  <View style={styles.form}>
+                    <Text style={styles.label}>ADMIN FULL NAME *</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="e.g. Ali Reza"
+                      value={adminName}
+                      onChangeText={setAdminName}
+                    />
+
+                    <Text style={styles.label}>WORKSPACE NAME</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="e.g. Acme Engineering"
+                      value={workspaceName}
+                      onChangeText={setWorkspaceName}
+                    />
+
+                    <Text style={styles.label}>EMAIL ADDRESS *</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="ali@acme.com"
+                      value={adminEmail}
+                      onChangeText={setAdminEmail}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                    />
+
+                    <Text style={styles.label}>PASSWORD *</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="At least 6 characters"
+                      secureTextEntry={!showPassword}
+                      value={adminPassword}
+                      onChangeText={setAdminPassword}
+                    />
+
+                    <TouchableOpacity
+                      style={[styles.submitBtn, loading && { opacity: 0.6 }]}
+                      onPress={handleAdminSignup}
+                      disabled={loading}
+                    >
+                      {loading ? (
+                        <ActivityIndicator color="#fff" size="small" />
+                      ) : (
+                        <Text style={styles.submitBtnText}>Create Workspace & Admin</Text>
+                      )}
                     </TouchableOpacity>
                   </View>
                 )}
               </View>
             )}
 
-            {activeTab === "member" && (
+            {/* ================= TEAM MEMBER PORTAL ================= */}
+            {portalType === "member" && (
               <View>
+                {/* Mode Selector */}
+                <View style={styles.modeRow}>
+                  <TouchableOpacity
+                    style={[styles.modeBtn, memberMode === "join" && styles.modeBtnActive]}
+                    onPress={() => {
+                      setMemberMode("join");
+                      clearMessages();
+                      setWaitingForApproval(false);
+                    }}
+                  >
+                    <Text style={[styles.modeText, memberMode === "join" && styles.modeTextActive]}>
+                      Join with Team Code
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.modeBtn, memberMode === "login" && styles.modeBtnActive]}
+                    onPress={() => {
+                      setMemberMode("login");
+                      clearMessages();
+                      setWaitingForApproval(false);
+                    }}
+                  >
+                    <Text style={[styles.modeText, memberMode === "login" && styles.modeTextActive]}>
+                      Member Sign In
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Waiting Approval Card */}
                 {waitingForApproval ? (
-                  <View style={{ alignItems: "center", padding: 14 }}>
-                    <ActivityIndicator size="large" color="#7c69ef" style={{ marginBottom: 8 }} />
-                    <Text style={{ color: "#ffffff", fontSize: 15, fontWeight: "800" }}>⏳ Awaiting Admin Approval</Text>
-                    <Text style={{ color: "#9aa5b8", fontSize: 11, marginTop: 4, marginBottom: 12 }}>Joining as {memberName}</Text>
-                    <TouchableOpacity style={styles.btn} onPress={() => memberLogin(memberName.trim()).then(u => { if (u?.user_id) { onSuccess(u); onClose(); } }).catch(() => setErrorMsg("Still pending."))}><Text style={styles.btnText}>Check Status Now</Text></TouchableOpacity>
+                  <View style={styles.waitingCard}>
+                    <ActivityIndicator size="large" color="#f59e0b" style={{ marginBottom: 12 }} />
+                    <Text style={styles.waitingTitle}>Awaiting Admin Approval</Text>
+                    <Text style={styles.waitingSub}>
+                      Your request has been delivered to the workspace admin. This screen will automatically open as soon as you are approved.
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.cancelWaitBtn}
+                      onPress={() => setWaitingForApproval(false)}
+                    >
+                      <Text style={styles.cancelWaitText}>Cancel / Edit Details</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : memberMode === "join" ? (
+                  /* Comprehensive Employee Join Form */
+                  <View style={styles.form}>
+                    <Text style={styles.label}>WORKSPACE INVITE CODE *</Text>
+                    <TextInput
+                      style={[styles.input, { letterSpacing: 1, fontWeight: "700", color: "#7c69ef" }]}
+                      placeholder="e.g. CASPIAN-2026"
+                      autoCapitalize="characters"
+                      value={teamCode}
+                      onChangeText={setTeamCode}
+                    />
+
+                    <Text style={styles.label}>YOUR FULL NAME *</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="e.g. Rahul Sharma"
+                      value={memberName}
+                      onChangeText={setMemberName}
+                    />
+
+                    <Text style={styles.label}>YOUR WORK EMAIL *</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="rahul@company.com"
+                      value={memberEmail}
+                      onChangeText={setMemberEmail}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                    />
+
+                    <Text style={styles.label}>ROLE / SPECIALTY *</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="e.g. Backend Engineer (FastAPI & PostgreSQL)"
+                      value={memberRole}
+                      onChangeText={setMemberRole}
+                    />
+
+                    <Text style={styles.label}>CONTACT PHONE (OPTIONAL)</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="+1 (555) 000-0000"
+                      value={memberContact}
+                      onChangeText={setMemberContact}
+                      keyboardType="phone-pad"
+                    />
+
+                    <Text style={styles.label}>SKILLS & SUMMARY (OPTIONAL)</Text>
+                    <TextInput
+                      style={[styles.input, { height: 60, textAlignVertical: "top" }]}
+                      placeholder="e.g. Python, Docker, API design, UI testing"
+                      multiline
+                      value={memberSkills}
+                      onChangeText={setMemberSkills}
+                    />
+
+                    <TouchableOpacity
+                      style={[styles.submitBtn, loading && { opacity: 0.6 }]}
+                      onPress={handleMemberJoin}
+                      disabled={loading}
+                    >
+                      {loading ? (
+                        <ActivityIndicator color="#fff" size="small" />
+                      ) : (
+                        <Text style={styles.submitBtnText}>Submit Join Request</Text>
+                      )}
+                    </TouchableOpacity>
                   </View>
                 ) : (
-                  <View>
-                    <View style={styles.subModeRow}>
-                      {[
-                        { key: "login", label: "👤 Sign In" },
-                        { key: "join", label: "🚀 Join Team" },
-                      ].map((m) => (
-                        <TouchableOpacity
-                          key={m.key}
-                          style={[styles.subModeBtn, memberMode === m.key && styles.subModeBtnActive]}
-                          onPress={() => { setMemberMode(m.key as any); reset(); }}
-                        >
-                          <Text style={[styles.subModeText, memberMode === m.key && styles.subModeTextActive]}>{m.label}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
+                  /* Simple Member Sign In */
+                  <View style={styles.form}>
+                    <Text style={styles.label}>WORKSPACE INVITE CODE</Text>
+                    <TextInput
+                      style={[styles.input, { letterSpacing: 1, fontWeight: "700", color: "#7c69ef" }]}
+                      placeholder="e.g. CASPIAN-2026"
+                      autoCapitalize="characters"
+                      value={teamCode}
+                      onChangeText={setTeamCode}
+                    />
 
-                    {memberMode === "login" ? (
-                      <View>
-                        <Text style={styles.label}>Registered Member Name</Text>
-                        <TextInput style={styles.input} placeholder="e.g. Kevin / Antony" placeholderTextColor="#64748b" value={memberName} onChangeText={setMemberName} />
-                        <TouchableOpacity style={styles.btn} onPress={handleMemberLogin} disabled={loading}>
-                          {loading ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.btnText}>Enter Workspace</Text>}
-                        </TouchableOpacity>
-                      </View>
-                    ) : (
-                      <View>
-                        {!teamVerified ? (
-                          <View>
-                            <Text style={styles.label}>Team Invite Code</Text>
-                            <TextInput style={[styles.input, { borderColor: "#7c69ef", textAlign: "center", fontWeight: "700" }]} placeholder="CASPIAN-2026" placeholderTextColor="#475569" autoCapitalize="characters" value={teamCode} onChangeText={t => setTeamCode(t.toUpperCase())} />
-                            <TouchableOpacity style={styles.btn} onPress={handleVerifyCode} disabled={loading}><Text style={styles.btnText}>Verify Team Code</Text></TouchableOpacity>
-                          </View>
-                        ) : (
-                          <View>
-                            <Text style={styles.label}>Full Name</Text>
-                            <TextInput style={styles.input} placeholder="Kavya Sharma" placeholderTextColor="#64748b" value={memberName} onChangeText={setMemberName} />
-                            <Text style={styles.label}>Email Address</Text>
-                            <TextInput style={styles.input} placeholder="kavya@company.com" placeholderTextColor="#64748b" value={memberEmail} onChangeText={setMemberEmail} autoCapitalize="none" />
-                            <Text style={styles.label}>Role in Team</Text>
-                            <TextInput style={styles.input} placeholder="Engineer / QA" placeholderTextColor="#64748b" value={memberRole} onChangeText={setMemberRole} />
-                            <TouchableOpacity style={styles.btn} onPress={handleJoinSubmit} disabled={loading}><Text style={styles.btnText}>Submit for Approval</Text></TouchableOpacity>
-                          </View>
-                        )}
-                      </View>
-                    )}
+                    <Text style={styles.label}>MEMBER NAME OR EMAIL *</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="e.g. Rahul or rahul@company.com"
+                      value={memberName}
+                      onChangeText={setMemberName}
+                    />
+
+                    <TouchableOpacity
+                      style={[styles.submitBtn, loading && { opacity: 0.6 }]}
+                      onPress={handleMemberLogin}
+                      disabled={loading}
+                    >
+                      {loading ? (
+                        <ActivityIndicator color="#fff" size="small" />
+                      ) : (
+                        <Text style={styles.submitBtnText}>Sign In to Workspace</Text>
+                      )}
+                    </TouchableOpacity>
                   </View>
                 )}
               </View>
@@ -407,32 +631,209 @@ export const AuthModal: React.FC<AuthModalProps> = ({ visible, onClose, onSucces
 };
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: "rgba(6, 8, 14, 0.88)", justifyContent: "center", alignItems: "center", padding: 16 },
-  card: { width: "100%", maxWidth: 400, backgroundColor: "#121420", borderRadius: 18, borderWidth: 1, borderColor: "rgba(124, 105, 239, 0.3)", overflow: "hidden", maxHeight: "88%" },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "rgba(255, 255, 255, 0.08)", backgroundColor: "#181a28" },
-  headerBrand: { color: "#ffffff", fontSize: 11, fontWeight: "800", letterSpacing: 0.5 },
-  demoBar: { backgroundColor: "#0d0f18", paddingHorizontal: 12, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: "rgba(255, 255, 255, 0.05)" },
-  demoBarTitle: { color: "#a797ff", fontSize: 9, fontWeight: "700", marginBottom: 3 },
-  demoChip: { backgroundColor: "#1e2235", paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 },
-  demoChipAdmin: { backgroundColor: "rgba(124, 105, 239, 0.25)" },
-  demoChipText: { color: "#cbd5e1", fontSize: 10 },
-  demoChipTextAdmin: { color: "#c4b5fd", fontWeight: "700" },
-  tabRow: { flexDirection: "row", backgroundColor: "#10121d", borderBottomWidth: 1, borderBottomColor: "rgba(255, 255, 255, 0.08)" },
-  tabBtn: { flex: 1, paddingVertical: 9, alignItems: "center" },
-  tabBtnActive: { borderBottomWidth: 2, borderBottomColor: "#7c69ef", backgroundColor: "#161826" },
-  tabText: { color: "#78859b", fontSize: 11, fontWeight: "600" },
-  tabTextActive: { color: "#a797ff", fontWeight: "700" },
-  errBox: { backgroundColor: "rgba(239, 68, 68, 0.15)", color: "#f87171", fontSize: 11, padding: 6, borderRadius: 6, marginBottom: 10 },
-  succBox: { backgroundColor: "rgba(34, 197, 94, 0.15)", color: "#4ade80", fontSize: 11, padding: 6, borderRadius: 6, marginBottom: 10 },
-  subModeRow: { flexDirection: "row", backgroundColor: "#0d0f18", padding: 2, borderRadius: 6, marginBottom: 12, gap: 2 },
-  subModeBtn: { flex: 1, paddingVertical: 5, borderRadius: 5, alignItems: "center" },
-  subModeBtnActive: { backgroundColor: "#7c69ef" },
-  subModeText: { color: "#94a3b8", fontSize: 10, fontWeight: "600" },
-  subModeTextActive: { color: "#ffffff", fontWeight: "700" },
-  label: { color: "#94a3b8", fontSize: 10, marginBottom: 3, fontWeight: "600" },
-  input: { backgroundColor: "#0d0f18", borderWidth: 1, borderColor: "#282c3f", borderRadius: 7, paddingHorizontal: 9, paddingVertical: 7, color: "#ffffff", fontSize: 12, marginBottom: 10 },
-  otpInput: { borderColor: "#7c69ef", fontSize: 18, fontWeight: "800", letterSpacing: 4, textAlign: "center" },
-  inlineBtn: { backgroundColor: "#7c69ef", borderRadius: 7, paddingHorizontal: 10, justifyContent: "center", marginBottom: 10 },
-  btn: { backgroundColor: "#7c69ef", borderRadius: 8, paddingVertical: 10, alignItems: "center", marginTop: 2 },
-  btnText: { color: "#ffffff", fontSize: 12, fontWeight: "700" },
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(10, 12, 22, 0.72)",
+    justifyContent: "flex-end",
+  },
+  card: {
+    backgroundColor: "#ffffff",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: "90%",
+    paddingBottom: 20,
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f1f5",
+  },
+  title: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#181829",
+  },
+  subtitle: {
+    fontSize: 11,
+    color: "#858397",
+    marginTop: 1,
+  },
+  closeBtn: {
+    padding: 6,
+  },
+  scrollBody: {
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 24,
+  },
+  portalTabs: {
+    flexDirection: "row",
+    backgroundColor: "#f3f4f6",
+    borderRadius: 12,
+    padding: 3,
+    marginBottom: 14,
+    gap: 4,
+  },
+  portalTab: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 9,
+    borderRadius: 9,
+    gap: 6,
+  },
+  portalTabActive: {
+    backgroundColor: "#ffffff",
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  portalTabText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#858397",
+  },
+  portalTabTextActive: {
+    color: "#7c69ef",
+    fontWeight: "800",
+  },
+  modeRow: {
+    flexDirection: "row",
+    backgroundColor: "#f9fafb",
+    borderRadius: 10,
+    padding: 3,
+    marginBottom: 14,
+    gap: 4,
+  },
+  modeBtn: {
+    flex: 1,
+    paddingVertical: 7,
+    borderRadius: 7,
+    alignItems: "center",
+  },
+  modeBtnActive: {
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+  },
+  modeText: {
+    fontSize: 11,
+    color: "#6b7280",
+    fontWeight: "600",
+  },
+  modeTextActive: {
+    color: "#111827",
+    fontWeight: "800",
+  },
+  form: {
+    gap: 4,
+  },
+  label: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#6b7280",
+    marginTop: 8,
+    marginBottom: 3,
+  },
+  input: {
+    backgroundColor: "#f9fafb",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    fontSize: 13,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    color: "#111827",
+  },
+  passwordRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    position: "relative",
+  },
+  eyeBtn: {
+    position: "absolute",
+    right: 12,
+    padding: 4,
+  },
+  submitBtn: {
+    backgroundColor: "#7c69ef",
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 14,
+  },
+  submitBtnText: {
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  errorBox: {
+    backgroundColor: "#fef2f2",
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#fee2e2",
+  },
+  errorText: {
+    color: "#b91c1c",
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  successBox: {
+    backgroundColor: "#f0fdf4",
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#dcfce7",
+  },
+  successText: {
+    color: "#15803d",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  waitingCard: {
+    backgroundColor: "#fffbeb",
+    borderRadius: 14,
+    padding: 20,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#fde68a",
+    marginVertical: 10,
+  },
+  waitingTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#92400e",
+    marginBottom: 6,
+  },
+  waitingSub: {
+    fontSize: 11,
+    color: "#b45309",
+    textAlign: "center",
+    lineHeight: 16,
+    marginBottom: 14,
+  },
+  cancelWaitBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#fcd34d",
+  },
+  cancelWaitText: {
+    color: "#92400e",
+    fontSize: 11,
+    fontWeight: "700",
+  },
 });

@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Image,
   TouchableOpacity,
   ScrollView,
   StatusBar,
@@ -15,33 +14,42 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import { membersData } from "../src/data";
 import { 
   getTasks, 
   getMembers, 
   getPendingMembers, 
+  getConnections,
   approveMember, 
   rejectMember, 
   sendChat, 
   setTaskStatus, 
+  respondToTask,
   Task, 
   Member, 
-  UserAuth 
+  UserAuth,
+  Connection 
 } from "../src/api";
 import { AuthModal } from "../src/components/AuthModal";
+import { ProfileModal } from "../src/components/ProfileModal";
+import { BottomNav } from "../src/components/BottomNav";
 import { AppIcon } from "../src/components/Icons";
+import { VoiceAssistantModal } from "../src/components/VoiceAssistantModal";
+import { TaskRejectModal } from "../src/components/TaskRejectModal";
+import { TaskCompleteModal } from "../src/components/TaskCompleteModal";
+import { TaskDetailModal } from "../src/components/TaskDetailModal";
+import { useSession } from "../src/session";
 
 export default function HomeScreen() {
-  const [currentUser, setCurrentUser] = useState<UserAuth | null>({
-    user_id: 1,
-    name: "Ali (Admin)",
-    role: "Admin / Workspace Owner",
-    team_code: "CASPIAN-2026",
-    team_name: "Caspian Sentinel Team",
-    token: "demo-1",
-  });
+  const { user: currentUser, loadingSession, saveSession, clearSession } = useSession();
 
   const [authModalVisible, setAuthModalVisible] = useState(false);
+  const [profileModalVisible, setProfileModalVisible] = useState(false);
+  const [voiceModalVisible, setVoiceModalVisible] = useState(false);
+  const [rejectModalTask, setRejectModalTask] = useState<Task | null>(null);
+  const [completeModalTask, setCompleteModalTask] = useState<Task | null>(null);
+  const [detailModalTask, setDetailModalTask] = useState<Task | null>(null);
+  const [taskActionLoadingId, setTaskActionLoadingId] = useState<number | null>(null);
+  const [connections, setConnections] = useState<Connection[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [pendingMembers, setPendingMembers] = useState<Member[]>([]);
@@ -61,27 +69,28 @@ export default function HomeScreen() {
     setLogoutVisible(true);
   };
 
-  const confirmLogout = () => {
+  const confirmLogout = async () => {
     setLogoutVisible(false);
-    setCurrentUser(null);
+    await clearSession();
     setTasks([]);
     setMembers([]);
     setPendingMembers([]);
-    setAuthModalVisible(true);
   };
 
   const loadDashboardData = useCallback(async () => {
     if (!currentUser) return;
     try {
       setLoading(true);
-      const [fTasks, fMembers, fPending] = await Promise.allSettled([
+      const [fTasks, fMembers, fPending, fConns] = await Promise.allSettled([
         getTasks(undefined, currentUser.team_code),
         getMembers(currentUser.team_code),
         isAdmin ? getPendingMembers(currentUser.team_code) : Promise.resolve([]),
+        getConnections(),
       ]);
       if (fTasks.status === "fulfilled") setTasks(fTasks.value);
       if (fMembers.status === "fulfilled") setMembers(fMembers.value);
       if (fPending.status === "fulfilled") setPendingMembers(fPending.value);
+      if (fConns.status === "fulfilled") setConnections(fConns.value);
       setTeamCode(currentUser.team_code);
     } catch (err) {
       console.warn("Dashboard load error:", err);
@@ -146,6 +155,38 @@ export default function HomeScreen() {
     }
   };
 
+  const handleAcceptTask = async (taskId: number) => {
+    setTaskActionLoadingId(taskId);
+    try {
+      await respondToTask(taskId, "accept", undefined, currentUser?.user_id);
+      await loadDashboardData();
+    } catch (err: any) {
+      Alert.alert("Error", err?.message || "Failed to accept task");
+    } finally {
+      setTaskActionLoadingId(null);
+    }
+  };
+
+  const handleConfirmRejectTask = async (taskId: number, reason: string) => {
+    try {
+      await respondToTask(taskId, "reject", reason, currentUser?.user_id);
+      await loadDashboardData();
+    } catch (err: any) {
+      Alert.alert("Error", err?.message || "Failed to reject task");
+      throw err;
+    }
+  };
+
+  const handleConfirmCompleteTask = async (taskId: number, solution: string) => {
+    try {
+      await respondToTask(taskId, "complete", solution, currentUser?.user_id);
+      await loadDashboardData();
+    } catch (err: any) {
+      Alert.alert("Error", err?.message || "Failed to complete task");
+      throw err;
+    }
+  };
+
   const relevantTasks = tasks.filter((t) => {
     if (!currentUser) return false;
     if (!isAdmin) return t.owner_id === currentUser.user_id;
@@ -157,74 +198,142 @@ export default function HomeScreen() {
   const completedTasks = relevantTasks.filter(t => t.status === "DONE");
   const displayTasks = taskStatusFilter === "ACTIVE" ? activeTasks : taskStatusFilter === "DONE" ? completedTasks : relevantTasks;
 
+  const slackConn = connections.find(c => c.channel === "slack");
+  const emailConn = connections.find(c => c.channel === "email");
+  const isSlackActive = slackConn?.status === "active";
+  const isEmailActive = emailConn?.status === "active";
+
+  if (loadingSession) {
+    return (
+      <SafeAreaView style={styles.safeContainer}>
+        <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#ffffff" }}>
+          <ActivityIndicator color="#7c69ef" size="large" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <SafeAreaView style={styles.safeContainer}>
+        <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+        <View style={styles.landingContainer}>
+          <View style={styles.landingHero}>
+            <View style={styles.landingLogoBadge}>
+              <AppIcon name="shield" size={36} color="#7c69ef" />
+            </View>
+            <Text style={styles.landingTitle}>Caspian TeamOps</Text>
+            <Text style={styles.landingSubtitle}>
+              Multi-Agent Workspace Orchestration & Autonomous Incident Command
+            </Text>
+          </View>
+
+          <View style={styles.landingCard}>
+            <Text style={styles.landingCardTitle}>Welcome to Workspace</Text>
+            <Text style={styles.landingCardDesc}>
+              Sign in as an Admin, or join a workspace using your team invite code.
+            </Text>
+
+            <TouchableOpacity
+              style={styles.landingPrimaryBtn}
+              onPress={() => setAuthModalVisible(true)}
+              activeOpacity={0.8}
+            >
+              <AppIcon name="user" size={16} color="#ffffff" />
+              <Text style={styles.landingPrimaryBtnText}>Sign In / Register Workspace</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.landingSecondaryBtn}
+              onPress={() => setAuthModalVisible(true)}
+              activeOpacity={0.8}
+            >
+              <AppIcon name="shield" size={16} color="#7c69ef" />
+              <Text style={styles.landingSecondaryBtnText}>Join with Team Invite Code</Text>
+            </TouchableOpacity>
+          </View>
+
+          <AuthModal
+            visible={authModalVisible}
+            onClose={() => setAuthModalVisible(false)}
+            onSuccess={async (u) => {
+              await saveSession(u);
+              setTeamCode(u.team_code);
+            }}
+          />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeContainer}>
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
       <View style={styles.container}>
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-          {/* Header */}
-          <View style={styles.header}>
-            <TouchableOpacity 
-              style={styles.profileRow}
-              onPress={currentUser ? handleLogout : () => setAuthModalVisible(true)}
-              activeOpacity={0.8}
-            >
-              <Image source={{ uri: membersData[0].avatar }} style={styles.avatarMain} />
-              <View>
-                <Text style={styles.greetingText}>{currentUser ? "Good Morning !" : "Session Locked"}</Text>
-                <View style={styles.nameRow}>
-                  <Text style={styles.userName}>{currentUser ? currentUser.name : "Guest User"}</Text>
-                  {currentUser && <Text style={styles.roleBadge}>{isAdmin ? "Admin" : "Member"}</Text>}
-                </View>
-              </View>
-            </TouchableOpacity>
-
-            <View style={styles.headerRightActions}>
-              {!currentUser && (
-                <TouchableOpacity style={styles.authBtn} onPress={() => setAuthModalVisible(true)} activeOpacity={0.7}>
-                  <AppIcon name="login" size={13} color="#fff" />
-                  <Text style={styles.authBtnText}>Sign In</Text>
-                </TouchableOpacity>
-              )}
+        {/* Modern App Header */}
+        <View style={styles.appHeader}>
+          <View style={styles.headerTitleRow}>
+            <View style={styles.brandIconBox}>
+              <AppIcon name="shield" variant="filled" size={16} color="#7c69ef" />
+            </View>
+            <View>
+              <Text style={styles.appTitle}>CASPIAN</Text>
+              <Text style={styles.workspaceSubtitle}>
+                {currentUser?.team_name || "Team Workspace"} · {currentUser?.team_code || teamCode}
+              </Text>
             </View>
           </View>
 
-          {/* Team Code Bar */}
-          {isAdmin && (
-            <View style={styles.teamCodeBanner}>
-              <View>
-                <Text style={styles.teamCodeLabel}>TEAM INVITE CODE</Text>
-                <Text style={styles.teamCodeVal}>{teamCode}</Text>
-              </View>
-              <TouchableOpacity 
-                style={styles.shareBtn}
-                onPress={() => Alert.alert("Team Code", `Share this code with employees to join: ${teamCode}`)}
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            {currentUser && (
+              <TouchableOpacity
+                style={styles.profileAvatar}
+                onPress={() => setProfileModalVisible(true)}
+                activeOpacity={0.8}
               >
-                <Text style={styles.shareBtnText}>Share Code</Text>
+                <Text style={styles.profileAvatarText}>
+                  {currentUser.name ? currentUser.name[0].toUpperCase() : "U"}
+                </Text>
               </TouchableOpacity>
-            </View>
-          )}
+            )}
+          </View>
+        </View>
 
-          {/* Project Architecture Hub Banner */}
-          <TouchableOpacity 
-            style={styles.projectHubBanner}
-            onPress={() => router.push("/project")}
-            activeOpacity={0.8}
-          >
-            <View style={styles.projectHubIcon}>
-              <AppIcon name="categories" size={16} color="#7c69ef" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.projectHubTitle}>Project Architecture & GitHub Hub</Text>
-              <Text style={styles.projectHubSub}>ali071205/caspian-ai- · Specs, Endpoints & Roles</Text>
-            </View>
-            <AppIcon name="arrow-forward" size={16} color="#7c69ef" />
-          </TouchableOpacity>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: 110 }}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Active Integrations Bar */}
+          {currentUser && (
+            (isSlackActive || isEmailActive) && (
+              <TouchableOpacity
+                style={styles.activeChannelsBanner}
+                onPress={() => router.push("/calendar")}
+                activeOpacity={0.8}
+              >
+                <View style={styles.activePill}>
+                  <View style={styles.dotGreen} />
+                  <Text style={styles.activePillText}>Slack: {slackConn?.detail?.replace("Connected: ", "") || "Active"}</Text>
+                </View>
+                <View style={styles.activePill}>
+                  <View style={styles.dotGreen} />
+                  <Text style={styles.activePillText}>Email: Active</Text>
+                </View>
+              </TouchableOpacity>
+            )
+          )}
 
           {/* Pending Approvals (Admin) */}
           {isAdmin && pendingMembers.length > 0 && (
             <View style={styles.pendingCard}>
-              <Text style={styles.pendingTitle}>⏳ Pending Approvals ({pendingMembers.length})</Text>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <Text style={styles.pendingTitle}>⏳ Pending Join Requests ({pendingMembers.length})</Text>
+                <TouchableOpacity onPress={() => router.push("/plan")}>
+                  <Text style={{ color: "#7c69ef", fontSize: 11, fontWeight: "700" }}>Manage Team →</Text>
+                </TouchableOpacity>
+              </View>
               {pendingMembers.map((m) => (
                 <View key={m.id} style={styles.pendingRow}>
                   <View style={{ flex: 1 }}>
@@ -233,7 +342,7 @@ export default function HomeScreen() {
                   </View>
                   <View style={{ flexDirection: "row", gap: 6 }}>
                     <TouchableOpacity style={styles.btnApprove} onPress={() => handleApprove(m.id, m.name)}>
-                      <Text style={styles.btnActionText}>Approve</Text>
+                      <Text style={styles.btnActionText}>✓ Approve</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.btnReject} onPress={() => handleReject(m.id, m.name)}>
                       <Text style={styles.btnActionText}>✕</Text>
@@ -262,6 +371,12 @@ export default function HomeScreen() {
                 value={chatInput}
                 onChangeText={setChatInput}
               />
+              <TouchableOpacity 
+                style={[styles.sendBtn, { backgroundColor: "#26293d", marginRight: 6 }]} 
+                onPress={() => setVoiceModalVisible(true)}
+              >
+                <AppIcon name="mic" size={16} color="#a797ff" />
+              </TouchableOpacity>
               <TouchableOpacity style={styles.sendBtn} onPress={() => handleSendChat()} disabled={chatLoading}>
                 {chatLoading ? <ActivityIndicator color="#fff" size="small" /> : <AppIcon name="send" size={15} color="#fff" />}
               </TouchableOpacity>
@@ -335,45 +450,144 @@ export default function HomeScreen() {
               displayTasks.map((item) => {
                 const owner = members.find(m => m.id === item.owner_id);
                 const isDone = item.status === "DONE";
+                const isPendingAck = item.status === "PENDING_ACK";
+                const isCancelled = item.status === "CANCELLED";
+                const rejectionReason = item.description?.includes("[REJECTED by")
+                  ? item.description.substring(item.description.indexOf("[REJECTED by")).split("\n")[0]
+                  : null;
+                const resolutionSummary = item.description?.includes("[RESOLVED by")
+                  ? item.description.substring(item.description.indexOf("[RESOLVED by")).split("\n")[0]
+                  : null;
+
                 return (
-                  <View key={item.id} style={[styles.taskCard, isDone && styles.taskCardDone]}>
-                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[styles.taskCard, isDone && styles.taskCardDone, isCancelled && styles.taskCardCancelled]}
+                    onPress={() => setDetailModalTask(item)}
+                    activeOpacity={0.92}
+                  >
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
                       <View style={{ flex: 1 }}>
-                        <Text style={[styles.taskTitle, isDone && styles.taskTitleDone]}>{item.title}</Text>
-                        <Text style={styles.taskMeta}>👤 {owner?.name || `Member #${item.owner_id}`} · Due: {item.deadline ? new Date(item.deadline).toLocaleDateString() : "Flexible"}</Text>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4, flexWrap: "wrap" }}>
+                          <Text style={[styles.taskTitle, isDone && styles.taskTitleDone, isCancelled && styles.taskTitleCancelled]}>
+                            {item.title}
+                          </Text>
+                          {isPendingAck && (
+                            <View style={styles.pendingBadge}>
+                              <Text style={styles.pendingBadgeText}>⏳ Awaiting Ack</Text>
+                            </View>
+                          )}
+                          {isCancelled && (
+                            <View style={styles.cancelledBadge}>
+                              <Text style={styles.cancelledBadgeText}>✕ Declined</Text>
+                            </View>
+                          )}
+                          {isDone && (
+                            <View style={styles.doneBadge}>
+                              <Text style={styles.doneBadgeText}>✓ Solved</Text>
+                            </View>
+                          )}
+                        </View>
+                        <Text style={styles.taskMeta}>
+                          👤 {owner?.name || `Member #${item.owner_id}`} · Due: {item.deadline ? new Date(item.deadline).toLocaleString([], { dateStyle: "short", timeStyle: "short" }) : "Flexible"}
+                        </Text>
+                        
+                        {/* AI Summary Link */}
+                        <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4, gap: 5 }}>
+                          <View style={styles.aiSummaryBadge}>
+                            <Text style={styles.aiSummaryBadgeText}>ℹ️ Tap to view AI Summary & Details</Text>
+                          </View>
+                        </View>
+
+                        {rejectionReason && (
+                          <Text style={styles.rejectionReasonText}>
+                            ⚠️ {rejectionReason}
+                          </Text>
+                        )}
+
+                        {resolutionSummary && (
+                          <Text style={styles.resolutionReasonText}>
+                            ✓ {resolutionSummary}
+                          </Text>
+                        )}
                       </View>
-                      <TouchableOpacity
-                        style={[styles.toggleBtn, isDone && styles.toggleBtnActive]}
-                        onPress={() => handleToggleTaskStatus(item.id, item.status)}
-                      >
-                        <Text style={[styles.toggleText, isDone && styles.toggleTextActive]}>{isDone ? "✓ Done" : "○ Mark"}</Text>
-                      </TouchableOpacity>
+
+                      {isPendingAck ? (
+                        <View style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
+                          <TouchableOpacity
+                            style={styles.taskAcceptBtn}
+                            onPress={() => handleAcceptTask(item.id)}
+                            disabled={taskActionLoadingId === item.id}
+                            activeOpacity={0.8}
+                          >
+                            {taskActionLoadingId === item.id ? (
+                              <ActivityIndicator size="small" color="#ffffff" />
+                            ) : (
+                              <Text style={styles.taskAcceptBtnText}>✓ Accept</Text>
+                            )}
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.taskRejectBtn}
+                            onPress={() => setRejectModalTask(item)}
+                            disabled={taskActionLoadingId === item.id}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.taskRejectBtnText}>✕ Reject</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <TouchableOpacity
+                          style={[styles.toggleBtn, isDone && styles.toggleBtnActive, isCancelled && styles.toggleBtnCancelled]}
+                          onPress={() => {
+                            if (isDone) {
+                              handleToggleTaskStatus(item.id, item.status);
+                            } else {
+                              setCompleteModalTask(item);
+                            }
+                          }}
+                        >
+                          <Text style={[styles.toggleText, isDone && styles.toggleTextActive, isCancelled && styles.toggleTextCancelled]}>
+                            {isDone ? "✓ Done" : isCancelled ? "✕ Closed" : "✓ Mark Done"}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 );
               })
             )}
           </View>
         </ScrollView>
 
-        {/* Floating Bottom Nav */}
-        <View style={styles.bottomNav}>
-          <TouchableOpacity style={[styles.navItem, styles.navItemActive]}>
-            <AppIcon name="home" variant="filled" size={22} color="#7c69ef" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navItem} onPress={() => router.push("/calendar")}>
-            <AppIcon name="library" variant="outline" size={22} color="#9aa5b8" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navItem} onPress={() => router.push("/plan")}>
-            <AppIcon name="edit" variant="outline" size={22} color="#9aa5b8" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navItem} onPress={() => router.push("/project")}>
-            <AppIcon name="categories" variant="outline" size={22} color="#9aa5b8" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navItem} onPress={currentUser ? handleLogout : () => setAuthModalVisible(true)}>
-            <AppIcon name="user" variant="outline" size={22} color="#9aa5b8" />
-          </TouchableOpacity>
-        </View>
+        {/* Solid Bottom Navigation Bar */}
+        <BottomNav activeTab="home" />
+
+        {/* Task Details & AI Problem Summary Modal */}
+        <TaskDetailModal
+          visible={!!detailModalTask}
+          task={detailModalTask}
+          owner={members.find(m => m.id === detailModalTask?.owner_id)}
+          onClose={() => setDetailModalTask(null)}
+          onAccept={(id) => handleAcceptTask(id)}
+          onOpenReject={(t) => setRejectModalTask(t)}
+          onOpenComplete={(t) => setCompleteModalTask(t)}
+        />
+
+        {/* Task Rejection Modal */}
+        <TaskRejectModal
+          visible={!!rejectModalTask}
+          task={rejectModalTask}
+          onClose={() => setRejectModalTask(null)}
+          onConfirmReject={handleConfirmRejectTask}
+        />
+
+        {/* Task Complete & Resolution Modal */}
+        <TaskCompleteModal
+          visible={!!completeModalTask}
+          task={completeModalTask}
+          onClose={() => setCompleteModalTask(null)}
+          onConfirmComplete={handleConfirmCompleteTask}
+        />
 
         {/* Auth Modal */}
         <Modal visible={logoutVisible} transparent animationType="fade" onRequestClose={() => setLogoutVisible(false)}>
@@ -397,10 +611,29 @@ export default function HomeScreen() {
         <AuthModal
           visible={authModalVisible}
           onClose={() => setAuthModalVisible(false)}
-          onSuccess={(u) => {
-            setCurrentUser(u);
+          onSuccess={async (u) => {
+            await saveSession(u);
             setTeamCode(u.team_code);
           }}
+        />
+
+        <ProfileModal
+          visible={profileModalVisible}
+          onClose={() => {
+            setProfileModalVisible(false);
+            loadDashboardData();
+          }}
+          currentUser={currentUser}
+          onLogout={handleLogout}
+        />
+
+        <VoiceAssistantModal
+          visible={voiceModalVisible}
+          onClose={() => setVoiceModalVisible(false)}
+          senderName={currentUser?.name || "Admin"}
+          teamCode={currentUser?.team_code || teamCode}
+          members={members}
+          onTaskCreated={loadDashboardData}
         />
       </View>
     </SafeAreaView>
@@ -408,22 +641,32 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeContainer: { flex: 1, backgroundColor: "#ffffff", paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight || 24) + 6 : 0 },
-  container: { flex: 1, backgroundColor: "#f7f8fc" },
-  scrollContent: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 100 },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
-  profileRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  avatarMain: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#eee" },
-  greetingText: { fontSize: 11, color: "#8e8e93", fontWeight: "500" },
-  nameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  userName: { fontSize: 14, fontWeight: "700", color: "#1c1c1e" },
-  roleBadge: { fontSize: 9, fontWeight: "700", backgroundColor: "rgba(124, 105, 239, 0.15)", color: "#7c69ef", paddingHorizontal: 5, paddingVertical: 1, borderRadius: 5 },
-  headerRightActions: { flexDirection: "row", alignItems: "center", gap: 8 },
-  logoutBtn: { flexDirection: "row", alignItems: "center", backgroundColor: "rgba(239, 68, 68, 0.1)", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, gap: 4 },
-  logoutBtnText: { color: "#ef4444", fontSize: 11, fontWeight: "700" },
-  authBtn: { flexDirection: "row", alignItems: "center", backgroundColor: "#7c69ef", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, gap: 4 },
-  authBtnText: { color: "#fff", fontSize: 11, fontWeight: "700" },
-  bellBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: "#ffffff", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#e5e5ea" },
+  safeContainer: { flex: 1, backgroundColor: "#ffffff" },
+  container: { flex: 1, backgroundColor: "#f7f8fc", width: "100%" },
+  landingContainer: { flex: 1, backgroundColor: "#ffffff", paddingHorizontal: 24, justifyContent: "center", alignItems: "center" },
+  landingHero: { alignItems: "center", marginBottom: 36 },
+  landingLogoBadge: { width: 72, height: 72, borderRadius: 24, backgroundColor: "#eeeaff", alignItems: "center", justifyContent: "center", marginBottom: 16 },
+  landingTitle: { fontSize: 26, fontWeight: "900", color: "#1c1c1e", letterSpacing: -0.5, marginBottom: 8 },
+  landingSubtitle: { fontSize: 13, color: "#8e8e93", textAlign: "center", lineHeight: 19, maxWidth: 280 },
+  landingCard: { width: "100%", maxWidth: 360, gap: 12 },
+  landingCardTitle: { fontSize: 16, fontWeight: "800", color: "#1c1c1e", textAlign: "center" },
+  landingCardDesc: { fontSize: 12, color: "#8e8e93", textAlign: "center", lineHeight: 17, marginBottom: 8 },
+  landingActionCard: { width: "100%", maxWidth: 360, gap: 12 },
+  landingPrimaryBtn: { backgroundColor: "#7c69ef", borderRadius: 14, paddingVertical: 15, alignItems: "center", justifyContent: "center" },
+  landingPrimaryBtnText: { color: "#ffffff", fontSize: 14, fontWeight: "800" },
+  landingSecondaryBtn: { backgroundColor: "#f0eeff", borderRadius: 14, paddingVertical: 14, alignItems: "center", justifyContent: "center" },
+  landingSecondaryBtnText: { color: "#7c69ef", fontSize: 13, fontWeight: "800" },
+  appHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, backgroundColor: "#ffffff", borderBottomWidth: 1, borderBottomColor: "#eee" },
+  headerTitleRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  brandIconBox: { width: 34, height: 34, borderRadius: 10, backgroundColor: "rgba(124, 105, 239, 0.12)", alignItems: "center", justifyContent: "center" },
+  appTitle: { fontSize: 16, fontWeight: "900", color: "#1c1c1e", letterSpacing: -0.5 },
+  workspaceSubtitle: { fontSize: 11, color: "#8e8e93", fontWeight: "500" },
+  profileAvatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: "#7c69ef", alignItems: "center", justifyContent: "center" },
+  profileAvatarText: { color: "#ffffff", fontSize: 13, fontWeight: "800" },
+  activeChannelsBanner: { flexDirection: "row", gap: 8, marginBottom: 12 },
+  activePill: { flexDirection: "row", alignItems: "center", backgroundColor: "rgba(34, 197, 94, 0.1)", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, gap: 5 },
+  dotGreen: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#22c55e" },
+  activePillText: { fontSize: 10, color: "#16a34a", fontWeight: "700" },
   logoutOverlay: { flex: 1, backgroundColor: "rgba(18, 17, 35, 0.48)", justifyContent: "flex-end" },
   logoutSheet: { backgroundColor: "#ffffff", borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingHorizontal: 22, paddingTop: 10, paddingBottom: 30, alignItems: "center" },
   logoutHandle: { width: 38, height: 4, borderRadius: 2, backgroundColor: "#d9d8e1", marginBottom: 20 },
@@ -434,17 +677,8 @@ const styles = StyleSheet.create({
   logoutConfirmText: { color: "#ffffff", fontSize: 13, fontWeight: "800" },
   logoutCancelBtn: { width: "100%", paddingVertical: 13, alignItems: "center" },
   logoutCancelText: { color: "#5f58a8", fontSize: 13, fontWeight: "700" },
-  teamCodeBanner: { backgroundColor: "#1c1b35", borderRadius: 12, padding: 10, flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
-  teamCodeLabel: { color: "#a797ff", fontSize: 9, fontWeight: "700", letterSpacing: 1 },
-  teamCodeVal: { color: "#ffffff", fontSize: 15, fontWeight: "800", letterSpacing: 1 },
-  shareBtn: { backgroundColor: "#7c69ef", paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 },
-  shareBtnText: { color: "#fff", fontSize: 11, fontWeight: "700" },
-  projectHubBanner: { flexDirection: "row", alignItems: "center", backgroundColor: "#ffffff", borderWidth: 1, borderColor: "rgba(124, 105, 239, 0.25)", borderRadius: 12, padding: 10, marginBottom: 12, gap: 8 },
-  projectHubIcon: { width: 30, height: 30, borderRadius: 8, backgroundColor: "rgba(124, 105, 239, 0.12)", alignItems: "center", justifyContent: "center" },
-  projectHubTitle: { color: "#1c1c1e", fontSize: 12, fontWeight: "700" },
-  projectHubSub: { color: "#7c69ef", fontSize: 10, marginTop: 1, fontWeight: "600" },
   pendingCard: { backgroundColor: "#fff4e5", borderRadius: 12, padding: 10, marginBottom: 12 },
-  pendingTitle: { fontSize: 12, fontWeight: "700", color: "#b45309", marginBottom: 6 },
+  pendingTitle: { fontSize: 12, fontWeight: "700", color: "#b45309" },
   pendingRow: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", padding: 8, borderRadius: 8, marginBottom: 4 },
   pendingName: { fontSize: 12, fontWeight: "700", color: "#1c1c1e" },
   pendingRole: { fontSize: 10, color: "#6b7280" },
@@ -477,14 +711,29 @@ const styles = StyleSheet.create({
   emptySub: { fontSize: 11, color: "#8e8e93", marginTop: 2 },
   taskCard: { backgroundColor: "#ffffff", borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: "#e5e5ea" },
   taskCardDone: { backgroundColor: "#f9fafb", opacity: 0.75 },
+  taskCardCancelled: { backgroundColor: "#fff5f5", borderColor: "#fecaca" },
   taskTitle: { fontSize: 13, fontWeight: "700", color: "#1c1c1e", marginBottom: 2 },
   taskTitleDone: { textDecorationLine: "line-through", color: "#9ca3af" },
+  taskTitleCancelled: { color: "#991b1b" },
   taskMeta: { fontSize: 10, color: "#6b7280" },
+  pendingBadge: { backgroundColor: "rgba(234, 179, 8, 0.15)", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  pendingBadgeText: { color: "#b45309", fontSize: 9, fontWeight: "700" },
+  cancelledBadge: { backgroundColor: "rgba(239, 68, 68, 0.15)", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  cancelledBadgeText: { color: "#dc2626", fontSize: 9, fontWeight: "700" },
+  doneBadge: { backgroundColor: "rgba(34, 197, 94, 0.15)", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  doneBadgeText: { color: "#16a34a", fontSize: 9, fontWeight: "700" },
+  aiSummaryBadge: { backgroundColor: "rgba(124, 105, 239, 0.08)", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: "rgba(124, 105, 239, 0.2)" },
+  aiSummaryBadgeText: { color: "#7c69ef", fontSize: 10, fontWeight: "600" },
+  rejectionReasonText: { fontSize: 11, color: "#dc2626", marginTop: 4, fontWeight: "500", lineHeight: 15 },
+  resolutionReasonText: { fontSize: 11, color: "#16a34a", marginTop: 4, fontWeight: "600", lineHeight: 15 },
+  taskAcceptBtn: { backgroundColor: "#16a34a", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, alignItems: "center", justifyContent: "center" },
+  taskAcceptBtnText: { color: "#ffffff", fontSize: 11, fontWeight: "800" },
+  taskRejectBtn: { backgroundColor: "#ef4444", paddingHorizontal: 8, paddingVertical: 6, borderRadius: 6, alignItems: "center", justifyContent: "center" },
+  taskRejectBtnText: { color: "#ffffff", fontSize: 11, fontWeight: "800" },
   toggleBtn: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: "rgba(124, 105, 239, 0.1)" },
   toggleBtnActive: { backgroundColor: "rgba(34, 197, 94, 0.15)" },
+  toggleBtnCancelled: { backgroundColor: "rgba(239, 68, 68, 0.1)" },
   toggleText: { color: "#7c69ef", fontSize: 10, fontWeight: "700" },
   toggleTextActive: { color: "#16a34a" },
-  bottomNav: { position: "absolute", bottom: 16, left: 16, right: 16, backgroundColor: "#161826", borderRadius: 22, flexDirection: "row", justifyContent: "space-around", paddingVertical: 8, elevation: 8 },
-  navItem: { padding: 6, borderRadius: 12 },
-  navItemActive: { backgroundColor: "rgba(124, 105, 239, 0.2)" },
+  toggleTextCancelled: { color: "#ef4444" },
 });

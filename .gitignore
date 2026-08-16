@@ -1,10 +1,41 @@
+# Python
 __pycache__/
 *.py[cod]
+*$py.class
+*.so
 .pytest_cache/
+.coverage
+htmlcov/
 .venv/
+env/
+venv/
+
+# Environment variables & secrets
 .env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# SQLite Databases & logs
 *.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.log
+
+# Node & Expo
 node_modules/
 .expo/
 dist/
 dist-web-check/
+web-build/
+.metro-cache/
+.npm/
+
+# IDE & OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo

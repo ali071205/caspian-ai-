@@ -187,6 +187,17 @@ export const setTaskStatus = (id: number, status: TaskStatus) =>
     body: JSON.stringify({ status }),
   });
 
+export const respondToTask = (
+  id: number,
+  action: "accept" | "reject" | "complete" | "done",
+  reason?: string,
+  userId?: number
+) =>
+  request<Task>(`/tasks/${id}/respond`, {
+    method: "PATCH",
+    body: JSON.stringify({ action, reason, user_id: userId }),
+  });
+
 export const getMembers = (teamCode?: string) =>
   request<Member[]>(`/members${teamCode ? `?team_code=${encodeURIComponent(teamCode)}` : ""}`);
 
@@ -211,10 +222,10 @@ export const getTeamStatus = () =>
 export const getConnections = () =>
   request<Connection[]>("/connections");
 
-export const sendChat = (message: string, senderName: string = "Admin") =>
+export const sendChat = (message: string, senderName: string = "Admin", teamCode?: string) =>
   request<{ reply: string; intent?: any }>("/chat", {
     method: "POST",
-    body: JSON.stringify({ message, sender_name: senderName, channel: "app" }),
+    body: JSON.stringify({ message, sender_name: senderName, channel: "app", team_code: teamCode }),
   });
 
 export const sendDirectMessage = (payload: {
@@ -227,13 +238,94 @@ export const sendDirectMessage = (payload: {
   body: JSON.stringify(payload),
 });
 
-export const uploadVoiceNote = async (uri: string, senderName: string) => {
-  const filename = uri.split("/").pop() || "voice-note.m4a";
+export interface ExtractedTaskPreview {
+  title: string;
+  owner_id: number | null;
+  owner_name: string;
+  owner_role: string;
+  priority: string;
+  deadline_str: string;
+  deadline_iso: string;
+}
+
+export interface VoiceAnalysisPreview {
+  transcript: string;
+  summary: string;
+  extracted_task: ExtractedTaskPreview | null;
+  sender: string;
+}
+
+export const analyzeVoiceDirective = async (transcript: string, senderName: string, teamCode?: string) => {
+  return request<VoiceAnalysisPreview>("/audio/analyze-directive", {
+    method: "POST",
+    body: JSON.stringify({ transcript, sender_name: senderName, team_code: teamCode }),
+  });
+};
+
+export const confirmVoiceTransfer = async (payload: {
+  title: string;
+  owner_id: number;
+  deadline_iso?: string;
+  description?: string;
+  priority?: string;
+  team_code?: string;
+}) => {
+  return request<{ status: string; task_id: number; title: string; owner_name: string; deadline: string; message: string }>("/audio/confirm-transfer", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+};
+
+export const transcribeVoiceAudio = async (audioBlob: Blob): Promise<string> => {
+  const form = new FormData();
+  form.append("file", audioBlob, "recording.webm");
+  const res = await fetch(`${API_URL}/audio/transcribe-voice`, {
+    method: "POST",
+    body: form,
+  });
+  if (!res.ok) {
+    throw new Error(`Transcription service unavailable (${res.status})`);
+  }
+  const data = await res.json();
+  return data.transcript || "";
+};
+
+export const transcribeNativeAudioFile = async (uri: string): Promise<string> => {
+  const form = new FormData();
+  const filename = uri.split("/").pop() || "recording.m4a";
   const extension = filename.split(".").pop()?.toLowerCase();
   const contentType = extension === "webm" ? "audio/webm" : extension === "wav" ? "audio/wav" : "audio/mp4";
+  form.append("file", { uri, name: filename, type: contentType } as any);
+  const res = await fetch(`${API_URL}/audio/transcribe-voice`, {
+    method: "POST",
+    body: form,
+  });
+  if (!res.ok) {
+    throw new Error(`Transcription service unavailable (${res.status})`);
+  }
+  const data = await res.json();
+  return data.transcript || "";
+};
+
+export const sendSTTDirective = async (transcript: string, senderName: string, teamCode?: string) => {
+  return request<VoiceUploadResult>("/audio/stt-route", {
+    method: "POST",
+    body: JSON.stringify({ transcript, sender_name: senderName, team_code: teamCode }),
+  });
+};
+
+export const uploadVoiceNote = async (uri: string, senderName: string, transcriptText?: string) => {
   const form = new FormData();
   form.append("sender_name", senderName);
-  form.append("file", { uri, name: filename, type: contentType } as any);
+  if (transcriptText) {
+    form.append("transcript", transcriptText);
+  }
+  if (uri) {
+    const filename = uri.split("/").pop() || "voice-note.m4a";
+    const extension = filename.split(".").pop()?.toLowerCase();
+    const contentType = extension === "webm" ? "audio/webm" : extension === "wav" ? "audio/wav" : "audio/mp4";
+    form.append("file", { uri, name: filename, type: contentType } as any);
+  }
 
   const response = await fetch(`${API_URL}/audio/transcribe-and-route`, {
     method: "POST",
@@ -249,3 +341,28 @@ export const getNotifications = (userId?: number) =>
 
 export const getEvents = () =>
   request<any[]>("/events");
+
+// ==================== 1-CLICK INTEGRATIONS ====================
+
+export const oneClickSlack = () =>
+  request<Connection>("/connections/slack/one-click", { method: "POST" });
+
+export const oneClickEmail = () =>
+  request<Connection>("/connections/email/one-click", { method: "POST" });
+
+// ==================== VOICE TTS ====================
+
+export const getTaskAudioUrl = (taskId: number) => `${API_URL}/tasks/${taskId}/audio`;
+
+export const playSpeechText = async (text: string) => {
+  const url = `${API_URL}/voice/tts`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  if (!response.ok) throw new Error("TTS playback failed");
+  const blob = await response.blob();
+  return URL.createObjectURL(blob);
+};
+
