@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -8,22 +8,90 @@ import {
   ScrollView,
   SafeAreaView,
   StatusBar,
+  TextInput,
+  Modal,
+  Alert,
+  ActivityIndicator,
 } from "react-native";
 import { router } from "expo-router";
 import { colors } from "../src/theme";
 import { membersData } from "../src/data";
+import { getTasks, setTaskStatus, createTask, getMembers, Task, Member, TaskStatus } from "../src/api";
 
 export default function CalendarScreen() {
-  const [selectedDay, setSelectedDay] = useState(21);
+  const [selectedDay, setSelectedDay] = useState(20);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [createModalVisible, setCreateModalVisible] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newOwnerId, setNewOwnerId] = useState(1);
+  const [submitting, setSubmitting] = useState(false);
 
   const days = [
-    { num: 18, day: "Mon" },
-    { num: 19, day: "Tue" },
-    { num: 20, day: "Wed" },
-    { num: 21, day: "Thu" },
-    { num: 22, day: "Fri" },
-    { num: 23, day: "Sat" },
-    { num: 24, day: "Sun" },
+    { num: 16, day: "Sun" },
+    { num: 17, day: "Mon" },
+    { num: 18, day: "Tue" },
+    { num: 19, day: "Wed" },
+    { num: 20, day: "Thu" },
+    { num: 21, day: "Fri" },
+    { num: 22, day: "Sat" },
+  ];
+
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [t, m] = await Promise.all([getTasks(), getMembers()]);
+      setTasks(t);
+      setMembers(m);
+      if (m.length > 0) setNewOwnerId(m[0].id);
+    } catch (err) {
+      console.warn("Calendar load error:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleStatusChange = async (taskId: number, newStatus: TaskStatus) => {
+    try {
+      await setTaskStatus(taskId, newStatus);
+      Alert.alert("Status Updated", `Task #${taskId} is now ${newStatus}`);
+      loadData();
+    } catch (err: any) {
+      Alert.alert("Error", err.message || "Failed to update status");
+    }
+  };
+
+  const handleCreateTask = async () => {
+    if (!newTitle.trim()) {
+      Alert.alert("Required", "Please enter a task title.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await createTask({
+        title: newTitle.trim(),
+        owner_id: newOwnerId,
+        deadline: new Date(2026, 7, selectedDay, 18, 0).toISOString(),
+      });
+      setNewTitle("");
+      setCreateModalVisible(false);
+      Alert.alert("Task Created", "Task assigned and added to calendar!");
+      loadData();
+    } catch (err: any) {
+      Alert.alert("Error", err.message || "Failed to create task");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const displayTasks = tasks.length > 0 ? tasks : [
+    { id: 1, title: "Healthcare Dashboard UI", description: "Design Team", owner_id: 1, deadline: "2026-08-20T18:00:00", status: "IN_PROGRESS" as const, at_risk: false },
+    { id: 2, title: "Automated Regression Test Suite", description: "QA Lead", owner_id: 2, deadline: "2026-08-20T18:00:00", status: "TODO" as const, at_risk: false },
   ];
 
   return (
@@ -43,15 +111,23 @@ export default function CalendarScreen() {
               <Text style={styles.backArrow}>‹</Text>
             </TouchableOpacity>
 
-            <Text style={styles.headerTitle}>Calendar</Text>
+            <Text style={styles.headerTitle}>Task Calendar</Text>
 
-            <TouchableOpacity style={styles.iconBtnRound}>
-              <Text style={styles.menuDots}>⋮</Text>
+            <TouchableOpacity 
+              style={styles.iconBtnRound}
+              onPress={() => setCreateModalVisible(true)}
+            >
+              <Text style={styles.plusIcon}>+</Text>
             </TouchableOpacity>
           </View>
 
           {/* Month Label */}
-          <Text style={styles.monthLabel}>August</Text>
+          <View style={styles.monthRow}>
+            <Text style={styles.monthLabel}>August 2026</Text>
+            <TouchableOpacity onPress={loadData}>
+              <Text style={styles.refreshText}>🔄 Refresh</Text>
+            </TouchableOpacity>
+          </View>
 
           {/* Date Strip */}
           <View style={styles.dateStrip}>
@@ -59,24 +135,24 @@ export default function CalendarScreen() {
               <TouchableOpacity
                 key={d.num}
                 style={[
-                  styles.dateCapsule,
-                  selectedDay === d.num && styles.dateCapsuleActive,
+                  styles.dateItem,
+                  selectedDay === d.num && styles.dateItemActive,
                 ]}
                 onPress={() => setSelectedDay(d.num)}
                 activeOpacity={0.7}
               >
                 <Text
                   style={[
-                    styles.dayNum,
-                    selectedDay === d.num && styles.textWhite,
+                    styles.dateNum,
+                    selectedDay === d.num && styles.dateNumActive,
                   ]}
                 >
                   {d.num}
                 </Text>
                 <Text
                   style={[
-                    styles.dayName,
-                    selectedDay === d.num && styles.textWhite,
+                    styles.dateDay,
+                    selectedDay === d.num && styles.dateDayActive,
                   ]}
                 >
                   {d.day}
@@ -85,128 +161,137 @@ export default function CalendarScreen() {
             ))}
           </View>
 
-          {/* Timeline List */}
-          <View style={styles.timelineList}>
-            {/* 09.00 AM Row */}
-            <View style={styles.timelineRow}>
-              <Text style={styles.timeLabel}>09.00 AM</Text>
-              <View style={[styles.eventCard, styles.eventCardPink]}>
-                <View style={styles.eventTop}>
-                  <View>
-                    <Text style={[styles.eventTitle, styles.textWhite]}>
-                      Research Plan
-                    </Text>
-                    <Text style={[styles.eventTime, styles.textWhite]}>
-                      🕒 09.30-10.45
-                    </Text>
-                  </View>
-                  <Text style={[styles.cardDots, styles.textWhite]}>⋮</Text>
-                </View>
-
-                <View style={styles.eventBottom}>
-                  <Text style={[styles.assignedLabel, styles.textWhite]}>
-                    Assigned to
-                  </Text>
-                  <View style={styles.userRow}>
-                    <Image
-                      source={{ uri: membersData[1].avatar }}
-                      style={styles.miniAvatar}
-                    />
-                    <Text style={[styles.userName, styles.textWhite]}>
-                      Wade Warren
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            </View>
-
-            {/* 11.00 AM Row with Active Time Badge */}
-            <View style={styles.timelineRow}>
-              <View style={styles.timeBadgeContainer}>
-                <View style={styles.activeTimeBadge}>
-                  <Text style={styles.activeTimeBadgeText}>11:30 AM</Text>
-                </View>
-              </View>
-
-              <TouchableOpacity
-                style={[styles.eventCard, styles.eventCardYellow]}
-                activeOpacity={0.9}
-                onPress={() => router.push("/plan")}
+          {/* Schedule Section */}
+          <View style={styles.scheduleSection}>
+            <View style={styles.scheduleHeaderRow}>
+              <Text style={styles.sectionHeading}>Scheduled Directives</Text>
+              <TouchableOpacity 
+                style={styles.addBtnSmall}
+                onPress={() => setCreateModalVisible(true)}
               >
-                <View style={styles.eventTop}>
-                  <View>
-                    <Text style={styles.eventTitle}>Team Meeting</Text>
-                    <Text style={styles.eventTime}>🕒 11.30-12.00</Text>
-                  </View>
-                  <Text style={styles.cardDots}>⋮</Text>
-                </View>
-
-                <View style={styles.eventBottom}>
-                  <View style={styles.avatarStackMini}>
-                    <Image
-                      source={{ uri: membersData[0].avatar }}
-                      style={[styles.stackImg, { marginLeft: 0 }]}
-                    />
-                    <Image
-                      source={{ uri: membersData[2].avatar }}
-                      style={styles.stackImg}
-                    />
-                    <Image
-                      source={{ uri: membersData[3].avatar }}
-                      style={styles.stackImg}
-                    />
-                    <View style={styles.stackMoreBadge}>
-                      <Text style={styles.stackMoreText}>+3</Text>
-                    </View>
-                  </View>
-                </View>
+                <Text style={styles.addBtnSmallText}>+ New Task</Text>
               </TouchableOpacity>
             </View>
 
-            {/* 12.00 PM Row */}
-            <View style={styles.timelineRow}>
-              <Text style={styles.timeLabel}>12.00 PM</Text>
-            </View>
-
-            {/* 01.00 PM Row */}
-            <View style={styles.timelineRow}>
-              <Text style={styles.timeLabel}>01.00 PM</Text>
-              <View style={[styles.eventCard, styles.eventCardBlue]}>
-                <View style={styles.eventTop}>
-                  <View>
-                    <Text style={[styles.eventTitle, styles.textWhite]}>
-                      Design Review on...
-                    </Text>
-                    <Text style={[styles.eventTime, styles.textWhite]}>
-                      🕒 13.00-13.30
-                    </Text>
+            {loading ? (
+              <ActivityIndicator color="#7c69ef" style={{ marginVertical: 20 }} />
+            ) : (
+              displayTasks.map((t) => (
+                <View key={t.id} style={styles.taskCard}>
+                  <View style={styles.taskCardHeader}>
+                    <Text style={styles.taskCardTitle}>{t.title}</Text>
+                    <View style={[styles.statusBadge, t.status === "DONE" ? styles.statusDone : t.status === "BLOCKED" ? styles.statusBlocked : styles.statusProgress]}>
+                      <Text style={styles.statusBadgeText}>{t.status}</Text>
+                    </View>
                   </View>
-                  <Text style={[styles.cardDots, styles.textWhite]}>⋮</Text>
-                </View>
 
-                <View style={styles.eventBottom}>
-                  <Text style={[styles.assignedLabel, styles.textWhite]}>
-                    Assigned to
+                  <Text style={styles.taskCardMeta}>
+                    Owner ID: #{t.owner_id} · Due: {t.deadline ? new Date(t.deadline).toLocaleDateString() : "Thursday"}
                   </Text>
-                  <View style={styles.userRow}>
-                    <Image
-                      source={{ uri: membersData[2].avatar }}
-                      style={styles.miniAvatar}
-                    />
-                    <Text style={[styles.userName, styles.textWhite]}>
-                      Leslie Alexander
-                    </Text>
+
+                  {/* Status Action Buttons */}
+                  <View style={styles.actionPillsRow}>
+                    <TouchableOpacity 
+                      style={[styles.statusPill, t.status === "IN_PROGRESS" && styles.statusPillActive]}
+                      onPress={() => handleStatusChange(t.id, "IN_PROGRESS")}
+                    >
+                      <Text style={styles.statusPillText}>In Progress</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity 
+                      style={[styles.statusPill, t.status === "BLOCKED" && styles.statusPillActive]}
+                      onPress={() => handleStatusChange(t.id, "BLOCKED")}
+                    >
+                      <Text style={styles.statusPillText}>Blocked</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity 
+                      style={[styles.statusPill, styles.statusPillDone, t.status === "DONE" && styles.statusPillActive]}
+                      onPress={() => handleStatusChange(t.id, "DONE")}
+                    >
+                      <Text style={styles.statusPillText}>Done ✓</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
-              </View>
-            </View>
-
-            {/* 02.30 PM Row */}
-            <View style={styles.timelineRow}>
-              <Text style={styles.timeLabel}>02.30 PM</Text>
-            </View>
+              ))
+            )}
           </View>
         </ScrollView>
+
+        {/* Create Task Modal */}
+        <Modal visible={createModalVisible} transparent animationType="slide">
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Create New Task</Text>
+
+              <Text style={styles.inputLabel}>Task Title</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="e.g. Implement Figma login screen"
+                placeholderTextColor="#777"
+                value={newTitle}
+                onChangeText={setNewTitle}
+              />
+
+              <Text style={styles.inputLabel}>Assign to Member</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+                {(members.length > 0 ? members : [{ id: 1, name: "Ali", role: "Lead" }]).map((m) => (
+                  <TouchableOpacity
+                    key={m.id}
+                    style={[styles.memberChoice, newOwnerId === m.id && styles.memberChoiceActive]}
+                    onPress={() => setNewOwnerId(m.id)}
+                  >
+                    <Text style={[styles.memberChoiceText, newOwnerId === m.id && styles.memberChoiceTextActive]}>
+                      {m.name} ({m.role?.split(" ")[0]})
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              <View style={styles.modalBtnRow}>
+                <TouchableOpacity
+                  style={styles.cancelBtn}
+                  onPress={() => setCreateModalVisible(false)}
+                >
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.createBtn}
+                  onPress={handleCreateTask}
+                  disabled={submitting}
+                >
+                  {submitting ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.createBtnText}>Assign & Save</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Bottom Navigation */}
+        <View style={styles.bottomNav}>
+          <TouchableOpacity
+            style={styles.navItem}
+            onPress={() => router.push("/")}
+          >
+            <Text style={styles.navIcon}>🏠</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={[styles.navItem, styles.navItemActive]}>
+            <Text style={styles.navIcon}>📅</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.navItem}
+            onPress={() => router.push("/plan")}
+          >
+            <Text style={styles.navIcon}>📋</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -215,201 +300,301 @@ export default function CalendarScreen() {
 const styles = StyleSheet.create({
   safeContainer: {
     flex: 1,
-    backgroundColor: colors.bgLight,
+    backgroundColor: "#ffffff",
   },
   container: {
     flex: 1,
-    backgroundColor: colors.bgLight,
+    backgroundColor: "#f7f8fc",
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 40,
+    paddingTop: 10,
+    paddingBottom: 100,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 20,
   },
   iconBtnRound: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#e5e5ea",
   },
   backArrow: {
-    fontSize: 24,
+    fontSize: 22,
+    color: "#1c1c1e",
     fontWeight: "600",
-    color: colors.textMain,
-    marginTop: -2,
+  },
+  plusIcon: {
+    fontSize: 20,
+    color: "#7c69ef",
+    fontWeight: "700",
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: "800",
-    color: colors.textMain,
+    fontWeight: "700",
+    color: "#1c1c1e",
   },
-  menuDots: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: colors.textMain,
+  monthRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 14,
   },
   monthLabel: {
-    textAlign: "center",
-    fontSize: 14,
-    fontWeight: "700",
-    color: colors.textMuted,
-    marginBottom: 16,
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#1c1c1e",
+  },
+  refreshText: {
+    fontSize: 12,
+    color: "#7c69ef",
+    fontWeight: "600",
   },
   dateStrip: {
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 24,
   },
-  dateCapsule: {
+  dateItem: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderRadius: 20,
     width: 42,
+    height: 64,
+    borderRadius: 21,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e5e5ea",
   },
-  dateCapsuleActive: {
-    backgroundColor: colors.purple,
+  dateItemActive: {
+    backgroundColor: "#1c1c1e",
+    borderColor: "#1c1c1e",
   },
-  dayNum: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: colors.textMain,
+  dateNum: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1c1c1e",
   },
-  dayName: {
+  dateNumActive: {
+    color: "#ffffff",
+  },
+  dateDay: {
     fontSize: 11,
-    fontWeight: "500",
-    color: colors.textMuted,
+    color: "#8e8e93",
     marginTop: 2,
   },
-  textWhite: {
-    color: "#ffffff",
+  dateDayActive: {
+    color: "rgba(255, 255, 255, 0.7)",
   },
-  timelineList: {
-    gap: 16,
+  scheduleSection: {
+    marginBottom: 20,
   },
-  timelineRow: {
+  scheduleHeaderRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 14,
   },
-  timeLabel: {
-    width: 60,
+  sectionHeading: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1c1c1e",
+  },
+  addBtnSmall: {
+    backgroundColor: "#7c69ef",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  addBtnSmallText: {
+    color: "#fff",
     fontSize: 11,
     fontWeight: "700",
-    color: colors.textMuted,
-    paddingTop: 12,
   },
-  timeBadgeContainer: {
-    width: 60,
-  },
-  activeTimeBadge: {
-    backgroundColor: colors.darkPill,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    borderRadius: 14,
-  },
-  activeTimeBadgeText: {
-    color: "#ffffff",
-    fontSize: 10,
-    fontWeight: "800",
-    textAlign: "center",
-  },
-  eventCard: {
-    flex: 1,
-    borderRadius: 22,
+  taskCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 18,
     padding: 16,
-    minHeight: 105,
-    justifyContent: "space-between",
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#e5e5ea",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  eventCardPink: {
-    backgroundColor: colors.pink,
-  },
-  eventCardYellow: {
-    backgroundColor: colors.yellow,
-  },
-  eventCardBlue: {
-    backgroundColor: colors.blue,
-  },
-  eventTop: {
+  taskCardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
-  },
-  eventTitle: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: colors.textMain,
-  },
-  eventTime: {
-    fontSize: 11,
-    fontWeight: "600",
-    marginTop: 4,
-    color: colors.textMain,
-  },
-  cardDots: {
-    fontSize: 16,
-    color: colors.textMain,
-  },
-  eventBottom: {
-    marginTop: 14,
-  },
-  assignedLabel: {
-    fontSize: 10,
-    fontWeight: "600",
-    opacity: 0.85,
-    marginBottom: 4,
-  },
-  userRow: {
-    flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    marginBottom: 6,
   },
-  miniAvatar: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+  taskCardTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#1c1c1e",
+    flex: 1,
+    marginRight: 8,
   },
-  userName: {
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  statusProgress: {
+    backgroundColor: "rgba(124, 105, 239, 0.15)",
+  },
+  statusBlocked: {
+    backgroundColor: "rgba(239, 68, 68, 0.15)",
+  },
+  statusDone: {
+    backgroundColor: "rgba(34, 197, 94, 0.15)",
+  },
+  statusBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#1c1c1e",
+  },
+  taskCardMeta: {
+    fontSize: 12,
+    color: "#8e8e93",
+    marginBottom: 12,
+  },
+  actionPillsRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  statusPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: "#f2f2f7",
+  },
+  statusPillActive: {
+    backgroundColor: "#7c69ef",
+  },
+  statusPillDone: {
+    backgroundColor: "#e8f9ed",
+  },
+  statusPillText: {
     fontSize: 11,
+    fontWeight: "600",
+    color: "#1c1c1e",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 380,
+    backgroundColor: "#161824",
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "rgba(124, 105, 239, 0.3)",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#fff",
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 12,
+    color: "#9aa5b8",
+    marginBottom: 6,
+  },
+  modalInput: {
+    backgroundColor: "#0e1017",
+    borderWidth: 1,
+    borderColor: "#2d3142",
+    borderRadius: 8,
+    color: "#fff",
+    padding: 10,
+    fontSize: 13,
+    marginBottom: 14,
+  },
+  memberChoice: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#212433",
+    marginRight: 8,
+  },
+  memberChoiceActive: {
+    backgroundColor: "#7c69ef",
+  },
+  memberChoiceText: {
+    color: "#aaa",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  memberChoiceTextActive: {
+    color: "#fff",
+  },
+  modalBtnRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 10,
+  },
+  cancelBtn: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: "#212433",
+    alignItems: "center",
+  },
+  cancelBtnText: {
+    color: "#aaa",
+    fontWeight: "600",
+  },
+  createBtn: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: "#7c69ef",
+    alignItems: "center",
+  },
+  createBtnText: {
+    color: "#fff",
     fontWeight: "700",
   },
-  avatarStackMini: {
+  bottomNav: {
+    position: "absolute",
+    bottom: 20,
+    left: 20,
+    right: 20,
+    height: 64,
+    backgroundColor: "#1c1c1e",
+    borderRadius: 32,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-around",
+    paddingHorizontal: 10,
   },
-  stackImg: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: "#ffffff",
-    marginLeft: -6,
-  },
-  stackMoreBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: colors.darkPill,
-    borderWidth: 1.5,
-    borderColor: "#ffffff",
-    marginLeft: -6,
+  navItem: {
+    width: 44,
+    height: 44,
     alignItems: "center",
     justifyContent: "center",
+    borderRadius: 22,
   },
-  stackMoreText: {
-    color: "#ffffff",
-    fontSize: 9,
-    fontWeight: "800",
+  navItemActive: {
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
+  },
+  navIcon: {
+    fontSize: 20,
   },
 });
